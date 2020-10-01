@@ -19,5 +19,5 @@ jobs:
         username: ${{ secrets.ACR_USERNAME }}
         password: ${{ secrets.ACR_PASSWORD }}
     - run: |
-        docker build . -t cdonkecr.azurecr.io/bot-composer:latest -f ./Composer/Dockerfile
+        docker build ./Composer -t cdonkecr.azurecr.io/bot-composer:latest -f ./Composer/Dockerfile
         docker push cdonkecr.azurecr.io/bot-composer:latest
