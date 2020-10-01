@@ -13,7 +13,8 @@ jobs:
       uses: actions/checkout@v2
 
 
-    - uses: azure/docker-login@v1
+    - name: Azure Container Registry Login, Build and Push
+      uses: azure/docker-login@v1
       with:
         login-server: cdonkecr.azurecr.io
         username: ${{ secrets.ACR_USERNAME }}
