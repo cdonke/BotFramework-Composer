@@ -1,0 +1,24 @@
+name: Bot Composer Docker Image
+
+on:
+  push:
+    branches: [ customizations ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Build the Docker image
+      run: docker build . --file Dockerfile --tag my-image-name:$(date +%s)
+
+
+    - uses: azure/docker-login@v1
+      with:
+        login-server: cdonkecr.azurecr.io
+        username: ${{ secrets.ACR_USERNAME }}
+        password: ${{ secrets.ACR_PASSWORD }}
+    - run: |
+        docker build . -t cdonkecr.azurecr.io/bot-composer:latest -f ./Composer/Dockerfile
+        docker push cdonkecr.azurecr.io/bot-composer:latest
