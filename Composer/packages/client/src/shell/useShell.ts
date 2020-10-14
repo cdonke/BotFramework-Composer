@@ -22,10 +22,11 @@ import {
   localeState,
   qnaFilesState,
   designPageLocationState,
-  botNameState,
+  botDisplayNameState,
   dialogSchemasState,
   lgFilesState,
   luFilesState,
+  rateInfoState,
 } from '../recoilModel';
 import { undoFunctionState } from '../recoilModel/undo/history';
 
@@ -36,7 +37,7 @@ import { useTriggerApi } from './triggerApi';
 
 const FORM_EDITOR = 'PropertyEditor';
 
-type EventSource = 'FlowEditor' | 'PropertyEditor' | 'DesignPage';
+type EventSource = 'FlowEditor' | 'PropertyEditor' | 'DesignPage' | 'VaCreation';
 
 export function useShell(source: EventSource, projectId: string): Shell {
   const dialogMapRef = useRef({});
@@ -54,8 +55,9 @@ export function useShell(source: EventSource, projectId: string): Shell {
   const luFiles = useRecoilValue(luFilesState(projectId));
   const lgFiles = useRecoilValue(lgFilesState(projectId));
   const dialogSchemas = useRecoilValue(dialogSchemasState(projectId));
-  const botName = useRecoilValue(botNameState(projectId));
+  const botName = useRecoilValue(botDisplayNameState(projectId));
   const settings = useRecoilValue(settingsState(projectId));
+  const flowZoomRate = useRecoilValue(rateInfoState);
 
   const userSettings = useRecoilValue(userSettingsState);
   const clipboardActions = useRecoilValue(clipboardActionsState);
@@ -74,6 +76,7 @@ export function useShell(source: EventSource, projectId: string): Shell {
     setMessage,
     displayManifestModal,
     updateSkill,
+    updateZoomRate,
   } = useRecoilValue(dispatcherState);
 
   const lgApi = useLgApi(projectId);
@@ -131,6 +134,10 @@ export function useShell(source: EventSource, projectId: string): Shell {
     }
 
     focusTo(projectId, dataPath, fragment ?? '');
+  }
+
+  function updateFlowZoomRate(currentRate) {
+    updateZoomRate({ currentRate });
   }
 
   dialogMapRef.current = dialogsMap;
@@ -204,6 +211,7 @@ export function useShell(source: EventSource, projectId: string): Shell {
       updateDialogSchema(dialogSchema, projectId);
     },
     updateSkillSetting: (...params) => updateSkill(projectId, ...params),
+    updateFlowZoomRate,
   };
 
   const currentDialog = useMemo(() => dialogs.find((d) => d.id === dialogId), [dialogs, dialogId]);
@@ -236,10 +244,14 @@ export function useShell(source: EventSource, projectId: string): Shell {
         focusedTab: promptTab,
         clipboardActions,
         hosted: !!isAbsHosted(),
+        luFeatures: settings.luFeatures,
         skills,
         skillsSettings: settings.skill || {},
+        flowZoomRate,
       }
-    : ({} as ShellData);
+    : ({
+        projectId,
+      } as ShellData);
 
   return {
     api,

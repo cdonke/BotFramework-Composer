@@ -12,7 +12,7 @@ import { resolveToBasePath } from './utils/fileUtil';
 import { data } from './styles';
 import { NotFound } from './components/NotFound';
 import { BASEPATH } from './constants';
-import { dispatcherState, schemasState, botProjectsSpaceState, botOpeningState } from './recoilModel';
+import { dispatcherState, schemasState, botProjectIdsState, botOpeningState } from './recoilModel';
 import { openAlertModal } from './components/Modal/AlertDialog';
 import { dialogStyle } from './components/Modal/dialogStyle';
 import { LoadingSpinner } from './components/LoadingSpinner';
@@ -27,6 +27,7 @@ const Notifications = React.lazy(() => import('./pages/notifications/Notificatio
 const Publish = React.lazy(() => import('./pages/publish/Publish'));
 const Skills = React.lazy(() => import('./pages/skills'));
 const BotCreationFlowRouter = React.lazy(() => import('./components/CreationFlow/CreationFlow'));
+const FormDialogPage = React.lazy(() => import('./pages/form-dialog/FormDialogPage'));
 
 const Routes = (props) => {
   const botOpening = useRecoilValue(botOpeningState);
@@ -55,12 +56,14 @@ const Routes = (props) => {
             <Notifications path="notifications" />
             <Publish path="publish/:targetName" />
             <Skills path="skills/*" />
+            <FormDialogPage path="forms/:schemaId/*" />
+            <FormDialogPage path="forms/*" />
             <DesignPage path="*" />
           </ProjectRouter>
           <SettingPage path="settings/*" />
           <BotCreationFlowRouter path="projects/*" />
           <BotCreationFlowRouter path="home" />
-          <PluginPageContainer path="page/:pluginId" />
+          <PluginPageContainer path="plugin/:pluginId/:bundleId" />
           <NotFound default />
         </Router>
       </Suspense>
@@ -89,8 +92,7 @@ const ProjectRouter: React.FC<RouteComponentProps<{ projectId: string }>> = (pro
   const { projectId = '' } = props;
   const schemas = useRecoilValue(schemasState(projectId));
   const { fetchProjectById } = useRecoilValue(dispatcherState);
-  const botProjects = useRecoilValue(botProjectsSpaceState);
-  const botOpening = useRecoilValue(botOpeningState);
+  const botProjects = useRecoilValue(botProjectIdsState);
 
   useEffect(() => {
     if (props.projectId && !botProjects.includes(props.projectId)) {
@@ -107,7 +109,7 @@ const ProjectRouter: React.FC<RouteComponentProps<{ projectId: string }>> = (pro
     }
   }, [schemas, projectId]);
 
-  if (props.projectId && !botOpening && botProjects.includes(props.projectId)) {
+  if (props.projectId && botProjects.includes(props.projectId)) {
     return <div css={projectStyle}>{props.children}</div>;
   }
   return <LoadingSpinner />;
