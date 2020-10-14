@@ -12,13 +12,16 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v2
 
-
     - name: Azure Container Registry Login, Build and Push
       uses: azure/docker-login@v1
       with:
         login-server: cdonkecr.azurecr.io
         username: ${{ secrets.ACR_USERNAME }}
         password: ${{ secrets.ACR_PASSWORD }}
-    - run: |
-        docker build ./Composer -t cdonkecr.azurecr.io/bot-composer:latest -f ./Composer/Dockerfile
-        docker push cdonkecr.azurecr.io/bot-composer:latest
+    
+    - name: Build and push
+      id: docker_build
+      uses: docker/build-push-action@v2
+      with:
+        push: true
+        tags: cdonkecr.azurecr.io/bot-composer:latest
