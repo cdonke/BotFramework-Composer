@@ -11,7 +11,7 @@ FROM node:12-alpine as build
 
 ARG YARN_ARGS
 
-WORKDIR /src/Composer
+WORKDIR /src
 COPY . .
 # run yarn install as a distinct layer
 RUN yarn install --frozen-lock-file $YARN_ARGS
