@@ -8,16 +8,19 @@
 ################
 
 FROM node:12-alpine as build
-
 ARG YARN_ARGS
 
 WORKDIR /src
 COPY . .
+
+WORKDIR /src/Composer
+RUN apk add --no-cache git
+
 # run yarn install as a distinct layer
-RUN yarn install --frozen-lock-file $YARN_ARGS
-ENV NODE_OPTIONS "--max-old-space-size=4096"
+RUN yarn install --frozen-lock-file --network-timeout 1000000 $YARN_ARGS
+ENV NODE_OPTIONS "--max-old-space-size=8192"
 ENV NODE_ENV "production"
-RUN yarn build:prod $YARN_ARGS
+RUN yarn build:prod --network-timeout 1000000 $YARN_ARGS
 
 
 
