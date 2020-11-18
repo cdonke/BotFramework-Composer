@@ -3,6 +3,7 @@ name: Bot Composer Docker Image
 on:
   push:
     branches: [ customizations ]
+  workflow_dispatch:
 
 jobs:
   build:
@@ -15,17 +16,17 @@ jobs:
     - name: Set outputs
       id: vars
       run: echo "::set-output name=sha_short::$(git rev-parse --short HEAD)"
-        
+
     - name: Azure Container Registry Login, Build and Push
       uses: azure/docker-login@v1
       with:
         login-server: cdonkecr.azurecr.io
         username: ${{ secrets.ACR_USERNAME }}
         password: ${{ secrets.ACR_PASSWORD }}
-    
+
     - name: Build and push
       run: |
         docker build -t cdonkecr.azurecr.io/bot-composer:latest -t cdonkecr.azurecr.io/bot-composer:${{ steps.vars.outputs.sha_short }} .
-        docker push cdonkecr.azurecr.io/bot-composer:${{ steps.vars.outputs.sha_short }} 
-        docker push cdonkecr.azurecr.io/bot-composer:latest 
-        
+        docker push cdonkecr.azurecr.io/bot-composer:${{ steps.vars.outputs.sha_short }}
+        docker push cdonkecr.azurecr.io/bot-composer:latest
+
