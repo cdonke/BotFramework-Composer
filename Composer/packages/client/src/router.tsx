@@ -12,7 +12,14 @@ import { resolveToBasePath } from './utils/fileUtil';
 import { data } from './styles';
 import { NotFound } from './components/NotFound';
 import { BASEPATH } from './constants';
-import { dispatcherState, schemasState, botProjectIdsState, botOpeningState, pluginPagesSelector } from './recoilModel';
+import {
+  dispatcherState,
+  schemasState,
+  botProjectIdsState,
+  botOpeningState,
+  pluginPagesSelector,
+  botOpeningMessage,
+} from './recoilModel';
 import { openAlertModal } from './components/Modal/AlertDialog';
 import { dialogStyle } from './components/Modal/dialogStyle';
 import { LoadingSpinner } from './components/LoadingSpinner';
@@ -32,6 +39,7 @@ const FormDialogPage = React.lazy(() => import('./pages/form-dialog/FormDialogPa
 const Routes = (props) => {
   const botOpening = useRecoilValue(botOpeningState);
   const pluginPages = useRecoilValue(pluginPagesSelector);
+  const spinnerText = useRecoilValue(botOpeningMessage);
 
   return (
     <div css={data}>
@@ -70,6 +78,13 @@ const Routes = (props) => {
               />
             ))}
           </ProjectRouter>
+          <ProjectRouter path="/bot/:projectId/skill/:skillId">
+            <DesignPage path="dialogs/:dialogId/*" />
+            <LUPage path="language-understanding/:dialogId/*" />
+            <LGPage path="language-generation/:dialogId/*" />
+            <QnAPage path="knowledge-base/:dialogId/*" />
+            <DesignPage path="*" />
+          </ProjectRouter>
           <SettingPage path="settings/*" />
           <BotCreationFlowRouter path="projects/*" />
           <BotCreationFlowRouter path="home" />
@@ -80,7 +95,7 @@ const Routes = (props) => {
         <div
           css={{ position: 'absolute', top: 0, left: 0, bottom: 0, right: 0, background: 'rgba(255, 255, 255, 0.6)' }}
         >
-          <LoadingSpinner />
+          <LoadingSpinner message={spinnerText} />
         </div>
       )}
     </div>
@@ -97,7 +112,7 @@ const projectStyle = css`
   label: ProjectRouter;
 `;
 
-const ProjectRouter: React.FC<RouteComponentProps<{ projectId: string }>> = (props) => {
+const ProjectRouter: React.FC<RouteComponentProps<{ projectId: string; skillId: string }>> = (props) => {
   const { projectId = '' } = props;
   const schemas = useRecoilValue(schemasState(projectId));
   const { fetchProjectById } = useRecoilValue(dispatcherState);
@@ -119,7 +134,11 @@ const ProjectRouter: React.FC<RouteComponentProps<{ projectId: string }>> = (pro
   }, [schemas, projectId]);
 
   if (props.projectId && botProjects.includes(props.projectId)) {
-    return <div css={projectStyle}>{props.children}</div>;
+    if (props.skillId && !botProjects.includes(props.skillId)) {
+      return <LoadingSpinner />;
+    } else {
+      return <div css={projectStyle}>{props.children}</div>;
+    }
   }
   return <LoadingSpinner />;
 };
