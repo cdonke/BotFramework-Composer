@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ILuisConfig, IQnAConfig } from '@bfc/shared';
+import { BaseSchema, ILuisConfig, IQnAConfig } from '@bfc/shared';
 
 export type Resource = { id: string; isEmpty: boolean };
 
@@ -37,9 +37,35 @@ export interface IOperationLUFile {
   relativePath?: string;
   content?: string;
   intents: [];
-  [key: string]: any;
 }
 
 export interface ILuisStatusOperation {
   [key: string]: IOperationLUFile;
+}
+
+export interface IOrchestratorNLRList {
+  version: string;
+  default: string;
+  readonly models: Record<
+    string,
+    {
+      releaseDate: string;
+      modelUri: string;
+      description: string;
+      minSDKVersion: string;
+    }
+  >;
+}
+
+export interface IOrchestratorProgress {
+  (status: string): void;
+}
+export interface IOrchestratorBuildOutput {
+  outputs: [{ id: string; snapshot: Uint8Array; recognizer: Record<string, BaseSchema> }];
+  settings: {
+    orchestrator: {
+      modelPath: string;
+      snapshots: Map<string, string>;
+    };
+  };
 }

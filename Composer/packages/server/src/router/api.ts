@@ -12,11 +12,14 @@ import { AssetController } from '../controllers/asset';
 import { EjectController } from '../controllers/eject';
 import { FormDialogController } from '../controllers/formDialog';
 import * as ExtensionsController from '../controllers/extensions';
+import { ProvisionController } from '../controllers/provision';
 import { FeatureFlagController } from '../controllers/featureFlags';
 import { AuthController } from '../controllers/auth';
 import { csrfProtection } from '../middleware/csrfProtection';
 import { ImportController } from '../controllers/import';
 import { StatusController } from '../controllers/status';
+import { SettingsController } from '../controllers/settings';
+import { TelemetryController } from '../controllers/telemetry';
 
 import { UtilitiesController } from './../controllers/utilities';
 
@@ -42,6 +45,7 @@ router.get('/projects/:projectId/export', ProjectController.exportProject);
 router.get('/projects/alias/:alias', ProjectController.getProjectByAlias);
 router.post('/projects/:projectId/backup', ProjectController.backupProject);
 router.post('/projects/:projectId/copyTemplateToExisting', ProjectController.copyTemplateToExistingProject);
+router.get('/projects/:projectId/variables', ProjectController.getVariablesByProjectId);
 
 // form dialog generation apis
 router.post('/formDialogs/expandJsonSchemaProperty', FormDialogController.expandJsonSchemaProperty);
@@ -61,8 +65,14 @@ router.get('/storages/:storageId/blobs', StorageController.getBlob);
 router.post('/storages/folder', StorageController.createFolder);
 router.put('/storages/folder', StorageController.updateFolder);
 
+// provision
+router.get('/provision/:projectId/status/:type/:target/:jobId', ProvisionController.getProvisionStatus);
+router.get('/provision/:projectId/:type/resources', ProvisionController.getResources);
+router.post('/provision/:projectId/:type', ProvisionController.provision);
+
 // publishing
 router.get('/publish/types', PublishController.getTypes);
+router.get('/publish/:projectId/status/:target/:jobId', PublishController.status);
 router.get('/publish/:projectId/status/:target', PublishController.status);
 router.post('/publish/:projectId/publish/:target', PublishController.publish);
 router.get('/publish/:projectId/history/:target', PublishController.history);
@@ -78,6 +88,8 @@ router.post('/runtime/eject/:projectId/:template', EjectController.eject);
 
 //assets
 router.get('/assets/projectTemplates', AssetController.getProjTemplates);
+router.post('/v2/assets/projectTemplates', AssetController.getProjTemplatesV2);
+router.get('/assets/templateReadme', AssetController.getTemplateReadMe);
 
 router.use('/assets/locales/', express.static(path.join(__dirname, '..', '..', 'src', 'locales')));
 
@@ -95,6 +107,7 @@ router.post('/extensions/proxy/:url', ExtensionsController.performExtensionFetch
 
 // authentication from client
 router.get('/auth/getAccessToken', csrfProtection, AuthController.getAccessToken);
+router.get('/auth/logOut', AuthController.logOut);
 
 // FeatureFlags
 router.get('/featureFlags', FeatureFlagController.getFeatureFlags);
@@ -107,11 +120,18 @@ router.post('/import/:source/authenticate', ImportController.authenticate);
 // Process status
 router.get('/status/:jobId', StatusController.getStatus);
 
+// User Server Settings
+router.get('/settings', SettingsController.getUserSettings);
+router.post('/settings', SettingsController.updateUserSettings);
+
+// Telemetry
+router.post('/telemetry/events', TelemetryController.track);
+
 const errorHandler = (handler: RequestHandler) => (req: Request, res: Response, next: NextFunction) => {
   Promise.resolve(handler(req, res, next)).catch(next);
 };
 
-router.stack.forEach((layer) => {
+(router as any).stack.forEach((layer) => {
   if (layer.route == null) return;
   const fn: RequestHandler = layer.route.stack[0].handle;
   layer.route.stack[0].handle = errorHandler(fn);

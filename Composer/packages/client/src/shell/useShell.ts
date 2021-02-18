@@ -2,33 +2,48 @@
 // Licensed under the MIT License.
 
 import { useMemo, useRef } from 'react';
-import { ShellApi, ShellData, Shell, DialogSchemaFile, DialogInfo } from '@botframework-composer/types';
+import {
+  ShellApi,
+  ShellData,
+  Shell,
+  DialogSchemaFile,
+  DialogInfo,
+  BotInProject,
+  FeatureFlagKey,
+  SDKKinds,
+} from '@botframework-composer/types';
 import { useRecoilValue } from 'recoil';
 import formatMessage from 'format-message';
+import { OpenConfirmModal } from '@bfc/ui-shared';
 
+import httpClient from '../utils/httpUtil';
 import { updateRegExIntent, renameRegExIntent, updateIntentTrigger } from '../utils/dialogUtil';
 import { getDialogData, setDialogData } from '../utils/dialogUtil';
 import { isAbsHosted } from '../utils/envUtil';
 import {
+  botProjectSpaceSelector,
   dispatcherState,
   userSettingsState,
   settingsState,
   clipboardActionsState,
   schemasState,
-  validateDialogsSelectorFamily,
   focusPathState,
-  skillsState,
   localeState,
   qnaFilesState,
   designPageLocationState,
   botDisplayNameState,
   dialogSchemasState,
-  lgFilesState,
   luFilesState,
   rateInfoState,
   rootBotProjectIdSelector,
+  featureFlagsState,
 } from '../recoilModel';
 import { undoFunctionState } from '../recoilModel/undo/history';
+import { dialogsWithLuProviderSelectorFamily, skillsStateSelector } from '../recoilModel/selectors';
+import { navigateTo } from '../utils/navigation';
+import TelemetryClient from '../telemetry/TelemetryClient';
+import { lgFilesSelectorFamily } from '../recoilModel/selectors/lg';
+import { getMemoryVariables } from '../recoilModel/dispatchers/utils/project';
 
 import { useLgApi } from './lgApi';
 import { useLuApi } from './luApi';
@@ -64,24 +79,30 @@ export function useShell(source: EventSource, projectId: string): Shell {
   const dialogMapRef = useRef({});
 
   const schemas = useRecoilValue(schemasState(projectId));
-  const dialogs = useRecoilValue(validateDialogsSelectorFamily(projectId));
+  const dialogs = useRecoilValue(dialogsWithLuProviderSelectorFamily(projectId));
   const focusPath = useRecoilValue(focusPathState(projectId));
-  const skills = useRecoilValue(skillsState(projectId));
+  const skills = useRecoilValue(skillsStateSelector);
   const locale = useRecoilValue(localeState(projectId));
   const qnaFiles = useRecoilValue(qnaFilesState(projectId));
   const undoFunction = useRecoilValue(undoFunctionState(projectId));
   const designPageLocation = useRecoilValue(designPageLocationState(projectId));
   const { undo, redo, commitChanges } = undoFunction;
   const luFiles = useRecoilValue(luFilesState(projectId));
-  const lgFiles = useRecoilValue(lgFilesState(projectId));
+  const lgFiles = useRecoilValue(lgFilesSelectorFamily(projectId));
   const dialogSchemas = useRecoilValue(dialogSchemasState(projectId));
   const botName = useRecoilValue(botDisplayNameState(projectId));
   const settings = useRecoilValue(settingsState(projectId));
   const flowZoomRate = useRecoilValue(rateInfoState);
   const rootBotProjectId = useRecoilValue(rootBotProjectIdSelector);
+  const isRootBot = rootBotProjectId === projectId;
+  const projectCollection = useRecoilValue<BotInProject[]>(botProjectSpaceSelector).map((bot) => ({
+    ...bot,
+    hasWarnings: false,
+  }));
 
   const userSettings = useRecoilValue(userSettingsState);
-  const clipboardActions = useRecoilValue(clipboardActionsState);
+  const clipboardActions = useRecoilValue(clipboardActionsState(projectId));
+  const featureFlags = useRecoilValue(featureFlagsState);
   const {
     updateDialog,
     updateDialogSchema,
@@ -91,13 +112,15 @@ export function useShell(source: EventSource, projectId: string): Shell {
     selectTo,
     setVisualEditorSelection,
     setVisualEditorClipboard,
-    addSkillDialogBegin,
     onboardingAddCoachMarkRef,
     updateUserSettings,
     setMessage,
     displayManifestModal,
-    updateSkill,
+    updateSkillsDataInBotProjectFile: updateEndpointInBotProjectFile,
     updateZoomRate,
+    reloadProject,
+    setApplicationLevelError,
+    updateRecognizer,
   } = useRecoilValue(dispatcherState);
 
   const lgApi = useLgApi(projectId);
@@ -138,6 +161,10 @@ export function useShell(source: EventSource, projectId: string): Shell {
   async function navigationTo(path, rest?) {
     if (rootBotProjectId == null) return;
     await navTo(projectId, path, rest);
+  }
+
+  async function openDialog(dialogId: string) {
+    await navTo(projectId, dialogId, '"beginDialog"');
   }
 
   async function focusEvent(subPath) {
@@ -197,14 +224,16 @@ export function useShell(source: EventSource, projectId: string): Shell {
         commitChanges();
       });
     },
+    updateRecognizer,
     updateRegExIntent: updateRegExIntentHandler,
     renameRegExIntent: renameRegExIntentHandler,
     updateIntentTrigger: updateIntentTriggerHandler,
     navTo: navigationTo,
+    onOpenDialog: openDialog,
     onFocusEvent: focusEvent,
     onFocusSteps: focusSteps,
     onSelect: setVisualEditorSelection,
-    onCopy: setVisualEditorClipboard,
+    onCopy: (clipboardActions) => setVisualEditorClipboard(clipboardActions, projectId),
     createDialog: (actionsSeed) => {
       return new Promise((resolve) => {
         createDialogBegin(
@@ -216,36 +245,45 @@ export function useShell(source: EventSource, projectId: string): Shell {
         );
       });
     },
-    addSkillDialog: () => {
-      return new Promise((resolve) => {
-        addSkillDialogBegin((newSkill: { manifestUrl: string; name: string } | null) => {
-          resolve(newSkill);
-        }, projectId);
-      });
-    },
     undo,
     redo,
     commitChanges,
-    addCoachMarkRef: onboardingAddCoachMarkRef,
-    updateUserSettings,
-    announce: setMessage,
-    displayManifestModal: (skillId) => displayManifestModal(skillId, projectId),
+    displayManifestModal: (skillId) => displayManifestModal(skillId),
+    isFeatureEnabled: (featureFlagKey: FeatureFlagKey): boolean => featureFlags?.[featureFlagKey]?.enabled ?? false,
     updateDialogSchema: async (dialogSchema: DialogSchemaFile) => {
       updateDialogSchema(dialogSchema, projectId);
     },
-    updateSkillSetting: (...params) => updateSkill(projectId, ...params),
+    updateSkill: async (skillId: string, skillsData) => {
+      updateEndpointInBotProjectFile(skillId, skillsData.skill, skillsData.selectedEndpointIndex);
+    },
     updateFlowZoomRate,
+    reloadProject: () => reloadProject(projectId),
     ...lgApi,
     ...luApi,
     ...qnaApi,
     ...triggerApi,
     ...actionApi,
+
+    // application context
+    addCoachMarkRef: onboardingAddCoachMarkRef,
+    announce: setMessage,
+    navigateTo,
+    setApplicationLevelError,
+    updateUserSettings,
+    confirm: OpenConfirmModal,
+    telemetryClient: TelemetryClient,
+    getMemoryVariables,
   };
 
-  const currentDialog = useMemo(() => dialogs.find((d) => d.id === dialogId) ?? stubDialog(), [
-    dialogs,
-    dialogId,
-  ]) as DialogInfo;
+  const currentDialog = useMemo(() => {
+    let result: any = dialogs.find((d) => d.id === dialogId) ?? dialogs.find((dialog) => dialog.isRoot);
+    if (!result) {
+      // Should not hit here as the seed content should atleast be the root dialog if no current dialog
+      result = stubDialog();
+    }
+    return result;
+  }, [dialogs, dialogId]);
+
   const editorData = useMemo(() => {
     return source === 'PropertyEditor'
       ? getDialogData(dialogsMap, dialogId, focused || selected || '')
@@ -256,6 +294,7 @@ export function useShell(source: EventSource, projectId: string): Shell {
     locale,
     botName,
     projectId,
+    projectCollection,
     dialogs,
     dialogSchemas,
     dialogId,
@@ -277,6 +316,16 @@ export function useShell(source: EventSource, projectId: string): Shell {
     skills,
     skillsSettings: settings.skill || {},
     flowZoomRate,
+    forceDisabledActions: isRootBot
+      ? []
+      : [
+          {
+            kind: SDKKinds.BeginSkill,
+            reason: formatMessage('You can only connect to a skill in the root bot.'),
+          },
+        ],
+    settings,
+    httpClient,
   };
 
   return {

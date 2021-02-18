@@ -5,7 +5,8 @@ import 'dotenv/config';
 import path from 'path';
 import crypto from 'crypto';
 
-import { getPortPromise } from 'portfinder';
+import toNumber from 'lodash/toNumber';
+import portfinder from 'portfinder';
 import express, { Express, Request, Response, NextFunction } from 'express';
 import bodyParser from 'body-parser';
 import morgan from 'morgan';
@@ -17,8 +18,9 @@ import { IntellisenseServer } from '@bfc/intellisense-languageserver';
 import { LGServer } from '@bfc/lg-languageserver';
 import { LUServer } from '@bfc/lu-languageserver';
 import chalk from 'chalk';
-import { ExtensionContext, ExtensionManager } from '@bfc/extension';
 
+import { ExtensionManager } from './services/extensionManager';
+import { ExtensionContext } from './models/extension/extensionContext';
 import { BotProjectService } from './services/project';
 import { getAuthProvider } from './router/auth';
 import { apiRouter } from './router/api';
@@ -28,6 +30,9 @@ import log from './logger';
 import { setEnvDefault } from './utility/setEnvDefault';
 import { ElectronContext, setElectronContext } from './utility/electronContext';
 import { authService } from './services/auth/auth';
+import DLServerContext from './directline/store/dlServerState';
+import { mountConversationsRoutes } from './directline/mountConversationRoutes';
+import { mountDirectLineRoutes } from './directline/mountDirectlineRoutes';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const session = require('express-session');
@@ -42,8 +47,8 @@ export async function start(electronContext?: ElectronContext): Promise<number |
   app.set('view options', { delimiter: '?' });
   app.use(compression());
 
-  app.use(bodyParser.json({ limit: '50mb' }));
-  app.use(bodyParser.urlencoded({ extended: false }));
+  app.use(bodyParser.json({ limit: '50mb' }) as any);
+  app.use(bodyParser.urlencoded({ extended: false }) as any);
   app.use(session({ secret: 'bot-framework-composer' }));
   app.use(ExtensionContext.passport.initialize());
   app.use(ExtensionContext.passport.session());
@@ -77,7 +82,7 @@ export async function start(electronContext?: ElectronContext): Promise<number |
     'upgrade-insecure-requests;',
   ];
 
-  app.all('*', (req: Request, res: Response, next: NextFunction) => {
+  app.all('*', (req: Request, res: Response, next?: NextFunction) => {
     res.header('Access-Control-Allow-Origin', '*');
     res.header('Access-Control-Allow-Methods', 'GET,HEAD,OPTIONS,POST,PUT,DELETE');
     res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
@@ -95,7 +100,7 @@ export async function start(electronContext?: ElectronContext): Promise<number |
       );
     }
 
-    next();
+    next?.();
   });
 
   app.use(`${BASEURL}/`, express.static(clientDirectory, { immutable: true, maxAge: 31536000 }));
@@ -113,6 +118,29 @@ export async function start(electronContext?: ElectronContext): Promise<number |
 
   // always authorize all api routes, it will be a no-op if no auth provider set
   app.use(`${BASEURL}/api`, authorize, apiRouter);
+
+  const addCORSHeaders = (req: Request, res: Response, next?: NextFunction) => {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET, PUT, POST, DELETE, PATCH, OPTIONS');
+    res.header(
+      'Access-Control-Allow-Headers',
+      'Origin, X-Requested-With, Content-Type, Accept, Authorization, x-ms-bot-agent'
+    );
+    next?.();
+  };
+
+  const preferredPort = toNumber(process.env.PORT) || 5000;
+  let port = preferredPort;
+
+  // Setup directline and conversation routes for v3 bots
+  const DLServerState = DLServerContext.getInstance(port);
+  const conversationRouter = mountConversationsRoutes(DLServerState);
+  app.use(`${BASEURL}`, conversationRouter);
+
+  const directlineRouter = mountDirectLineRoutes(DLServerState);
+  app.use(`${BASEURL}`, directlineRouter);
+  conversationRouter.use((req, res, next) => addCORSHeaders(req, res, next));
+  directlineRouter.use((req, res, next) => addCORSHeaders(req, res, next));
 
   // next needs to be an arg in order for express to recognize this as the error handler
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -137,13 +165,11 @@ export async function start(electronContext?: ElectronContext): Promise<number |
     });
   });
 
-  const preferredPort = process.env.PORT || 5000;
-  let port = preferredPort;
   if (process.env.NODE_ENV === 'production') {
     // Dynamically search for an open PORT starting with PORT or 5000, so that
     // the app doesn't crash if the port is already being used.
     // (disabled in dev in order to avoid breaking the webpack dev server proxy)
-    port = await getPortPromise({ port: preferredPort as number });
+    port = await portfinder.getPortPromise({ port: preferredPort });
   }
   let server;
   await new Promise((resolve) => {

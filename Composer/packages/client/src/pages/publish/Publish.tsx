@@ -3,354 +3,252 @@
 
 /** @jsx jsx */
 import { jsx } from '@emotion/core';
-import { useState, useEffect, Fragment, useCallback, useMemo } from 'react';
+import { useState, useEffect, useMemo, Fragment, useRef } from 'react';
 import { RouteComponentProps } from '@reach/router';
 import formatMessage from 'format-message';
-import { Dialog, DialogType } from 'office-ui-fabric-react/lib/Dialog';
-import { TextField } from 'office-ui-fabric-react/lib/TextField';
-import { PublishTarget } from '@bfc/shared';
 import { useRecoilValue } from 'recoil';
+import { PublishResult } from '@bfc/shared';
 
-import { LeftRightSplit } from '../../components/Split/LeftRightSplit';
-import settingsStorage from '../../utils/dialogSettingStorage';
-import { projectContainer } from '../design/styles';
-import {
-  dispatcherState,
-  settingsState,
-  botDisplayNameState,
-  publishTypesState,
-  publishHistoryState,
-} from '../../recoilModel';
+import { dispatcherState, localBotPublishHistorySelector, localBotsDataSelector } from '../../recoilModel';
+import { AuthDialog } from '../../components/Auth/AuthDialog';
+import { createNotification } from '../../recoilModel/dispatchers/notification';
+import { Notification } from '../../recoilModel/types';
+import { getSensitiveProperties } from '../../recoilModel/dispatchers/utils/project';
+import { armScopes } from '../../constants';
+import { getTokenFromCache, isShowAuthDialog, isGetTokenFromUser } from '../../utils/auth';
+import { AuthClient } from '../../utils/authClient';
+import TelemetryClient from '../../telemetry/TelemetryClient';
+import { ApiStatus, PublishStatusPollingUpdater, pollingUpdaterList } from '../../utils/publishStatusPollingUpdater';
 import { navigateTo } from '../../utils/navigation';
-import { Toolbar, IToolbarItem } from '../../components/Toolbar';
-import { OpenConfirmModal } from '../../components/Modal/ConfirmDialog';
 
-import { TargetList } from './targetList';
-import { PublishDialog } from './publishDialog';
-import { ContentHeaderStyle, HeaderText, ContentStyle, contentEditor, overflowSet, targetSelected } from './styles';
-import { CreatePublishTarget } from './createPublishTarget';
-import { PublishStatusList, IStatus } from './publishStatusList';
+import { PublishDialog } from './PublishDialog';
+import { ContentHeaderStyle, HeaderText, ContentStyle, contentEditor } from './styles';
+import { BotStatusList } from './BotStatusList';
+import { getPendingNotificationCardProps, getPublishedNotificationCardProps } from './Notifications';
 import { PullDialog } from './pullDialog';
+import { PublishToolbar } from './PublishToolbar';
+import { Bot, BotStatus } from './type';
+import {
+  initUpdaterStatus,
+  generateBotPropertyData,
+  generateBotStatusList,
+  deleteNotificationInterval,
+} from './publishPageUtils';
 
 const Publish: React.FC<RouteComponentProps<{ projectId: string; targetName?: string }>> = (props) => {
-  const selectedTargetName = props.targetName;
   const { projectId = '' } = props;
-  const [selectedTarget, setSelectedTarget] = useState<PublishTarget | undefined>();
-  const settings = useRecoilValue(settingsState(projectId));
-  const botName = useRecoilValue(botDisplayNameState(projectId));
-  const publishTypes = useRecoilValue(publishTypesState(projectId));
-  const publishHistory = useRecoilValue(publishHistoryState(projectId));
 
+  const botProjectData = useRecoilValue(localBotsDataSelector);
+  const publishHistoryList = useRecoilValue(localBotPublishHistorySelector);
   const {
-    getPublishStatus,
-    getPublishTargetTypes,
     getPublishHistory,
+    getPublishStatusV2,
     setPublishTargets,
     publishToTarget,
     setQnASettings,
     rollbackToVersion: rollbackToVersionDispatcher,
-    setCurrentPageMode,
+    addNotification,
+    deleteNotification,
   } = useRecoilValue(dispatcherState);
 
-  const [addDialogHidden, setAddDialogHidden] = useState(true);
-  const [editDialogHidden, setEditDialogHidden] = useState(true);
+  const pendingNotificationRef = useRef<Notification>();
+  const showNotificationsRef = useRef<Record<string, boolean>>({});
 
-  const [showLog, setShowLog] = useState(false);
-  const [publishDialogHidden, setPublishDialogHidden] = useState(true);
-  const [pullDialogHidden, setPullDialogHidden] = useState(true);
-
-  // items to show in the list
-  const [thisPublishHistory, setThisPublishHistory] = useState<IStatus[]>([]);
-  const [groups, setGroups] = useState<any[]>([]);
-  const [selectedVersion, setSelectedVersion] = useState<IStatus | null>(null);
-  const [dialogProps, setDialogProps] = useState({
-    title: formatMessage('Title'),
-    type: DialogType.normal,
-    children: {},
-  });
-  const [editDialogProps, setEditDialogProps] = useState({
-    title: formatMessage('Title'),
-    type: DialogType.normal,
-    children: {},
-  });
-  const [editTarget, setEditTarget] = useState<{ index: number; item: PublishTarget } | null>(null);
-
-  const isRollbackSupported = useMemo(
-    () => (target, version): boolean => {
-      if (version.id && version.status === 200 && target) {
-        const type = publishTypes?.filter((t) => t.name === target.type)[0];
-        if (type?.features?.rollback) {
-          return true;
-        }
-      }
-      return false;
-    },
-    [projectId, publishTypes]
+  const [currentBotList, setCurrentBotList] = useState<Bot[]>([]);
+  const [publishDialogVisible, setPublishDialogVisiblity] = useState(false);
+  const [pullDialogVisible, setPullDialogVisiblity] = useState(false);
+  const [showAuthDialog, setShowAuthDialog] = useState(false);
+  const [updaterStatus, setUpdaterStatus] = useState<{ [skillId: string]: boolean }>(
+    initUpdaterStatus(publishHistoryList)
   );
+  const [checkedSkillIds, setCheckedSkillIds] = useState<string[]>([]);
 
-  const isPullSupported = useMemo(() => {
-    if (selectedTarget) {
-      const type = publishTypes?.find((t) => t.name === selectedTarget.type);
+  const { botPropertyData, botList } = useMemo(() => {
+    return generateBotPropertyData(botProjectData);
+  }, [botProjectData]);
+
+  const botStatusList = useMemo(() => {
+    return generateBotStatusList(currentBotList, botPropertyData, publishHistoryList);
+  }, [currentBotList, botPropertyData, publishHistoryList]);
+
+  const isPublishPending = useMemo(() => {
+    return Object.values(updaterStatus).some(Boolean);
+  }, [updaterStatus]);
+
+  const selectedBots = useMemo(() => {
+    return currentBotList.filter((bot) => checkedSkillIds.some((id) => bot.id === id));
+  }, [checkedSkillIds]);
+
+  const canPull = useMemo(() => {
+    return selectedBots.some((bot) => {
+      const { publishTypes, publishTargets } = botPropertyData[bot.id];
+      const type = publishTypes?.find(
+        (t) => t.name === publishTargets?.find((target) => target.name === bot.publishTarget)?.type
+      );
       if (type?.features?.pull) {
         return true;
       }
-    }
-    return false;
-  }, [projectId, publishTypes, selectedTarget]);
+      return false;
+    });
+  }, [selectedBots]);
 
-  const toolbarItems: IToolbarItem[] = [
-    {
-      type: 'action',
-      text: formatMessage('Add new profile'),
-      buttonProps: {
-        iconProps: {
-          iconName: 'Add',
-        },
-        onClick: () => setAddDialogHidden(false),
-      },
-      align: 'left',
-      dataTestid: 'publishPage-Toolbar-Add',
-      disabled: false,
-    },
-    {
-      type: 'action',
-      text: formatMessage('Publish to selected profile'),
-      buttonProps: {
-        iconProps: {
-          iconName: 'CloudUpload',
-        },
-        onClick: () => setPublishDialogHidden(false),
-      },
-      align: 'left',
-      dataTestid: 'publishPage-Toolbar-Publish',
-      disabled: selectedTargetName !== 'all' ? false : true,
-    },
-    {
-      type: 'action',
-      text: formatMessage('Pull from selected profile'),
-      buttonProps: {
-        iconProps: {
-          iconName: 'CloudDownload',
-        },
-        onClick: () => setPullDialogHidden(false),
-      },
-      align: 'left',
-      dataTestid: 'publishPage-Toolbar-Pull',
-      disabled: !isPullSupported,
-    },
-    {
-      type: 'action',
-      text: formatMessage('See Log'),
-      buttonProps: {
-        iconProps: {
-          iconName: 'ClipboardList',
-        },
-        onClick: () => setShowLog(true),
-      },
-      align: 'left',
-      disabled: selectedVersion ? false : true,
-      dataTestid: 'publishPage-Toolbar-Log',
-    },
-    {
-      type: 'action',
-      text: formatMessage('Rollback'),
-      buttonProps: {
-        iconProps: {
-          iconName: 'ClipboardList',
-        },
-        onClick: () => rollbackToVersion(selectedVersion),
-      },
-      align: 'left',
-      disabled: selectedTarget && selectedVersion ? !isRollbackSupported(selectedTarget, selectedVersion) : true,
-      dataTestid: 'publishPage-Toolbar-Log',
-    },
-  ];
+  const canPublish =
+    checkedSkillIds.length > 0 && !isPublishPending && selectedBots.some((bot) => Boolean(bot.publishTarget));
 
-  const onSelectTarget = useCallback(
-    (targetName) => {
-      const url = `/bot/${projectId}/publish/${targetName}`;
-      navigateTo(url);
-    },
-    [projectId]
-  );
+  // stop polling updater & delete pending notification
+  const stopUpdater = async (updater) => {
+    updater.stop();
 
-  const getUpdatedStatus = (target) => {
-    if (target) {
-      // TODO: this should use a backoff mechanism to not overload the server with requests
-      // OR BETTER YET, use a websocket events system to receive updates... (SOON!)
-      setTimeout(async () => {
-        getPublishStatus(projectId, target);
-      }, 10000);
-    }
+    // Remove pending notification
+    const pendingNotification = pendingNotificationRef.current;
+    pendingNotification && (await deleteNotification(pendingNotification.id));
+    pendingNotificationRef.current = undefined;
   };
 
   useEffect(() => {
-    // if url was wrong, redirect to all profiles page
-    const activeDialog = settings.publishTargets?.find(({ name }) => name === selectedTargetName);
-    if (!activeDialog && selectedTargetName !== 'all') {
-      navigateTo(`/bot/${projectId}/publish/all`);
+    if (currentBotList.length < botList.length) {
+      // init bot status list for the botProjectData is empty array when first mounted
+      setCurrentBotList(botList);
+
+      // Start updaters
+      botList
+        .filter(
+          (bot) => !!bot.publishTarget && !pollingUpdaterList.some((u) => u.isSameUpdater(bot.id, bot.publishTarget))
+        )
+        .forEach((bot) => {
+          if (pollingUpdaterList.some((updater) => updater.isSameUpdater(bot.id, bot.publishTarget))) return;
+          const updater = new PublishStatusPollingUpdater(bot.id, bot.publishTarget);
+          pollingUpdaterList.push(updater);
+          updater.start(onReceiveUpdaterPayload);
+        });
     }
-  }, [selectedTargetName, projectId, settings.publishTargets]);
+  }, [botList]);
 
   useEffect(() => {
-    if (projectId) {
-      getPublishTargetTypes(projectId);
-      // init selected status
-      setSelectedVersion(null);
-    }
-  }, [projectId]);
-
-  useEffect(() => {
-    if (settings.publishTargets && settings.publishTargets.length > 0) {
-      const selected = settings.publishTargets.find((item) => item.name === selectedTargetName);
-      setSelectedTarget(selected);
-      // load publish histories
-      if (selectedTargetName === 'all') {
-        for (const target of settings.publishTargets) {
-          getPublishHistory(projectId, target);
-        }
-      } else if (selected) {
-        getPublishHistory(projectId, selected);
-      }
-    }
-  }, [projectId, selectedTargetName]);
-
-  // once history is loaded, display it
-  useEffect(() => {
-    if (settings.publishTargets && selectedTargetName === 'all') {
-      let histories: any[] = [];
-      const groups: any[] = [];
-      let startIndex = 0;
-      for (const target of settings.publishTargets) {
-        if (publishHistory[target.name]) {
-          histories = histories.concat(publishHistory[target.name]);
-          groups.push({
-            key: target.name,
-            name: target.name,
-            startIndex: startIndex,
-            count: publishHistory[target.name].length,
-            level: 0,
-          });
-          startIndex += publishHistory[target.name].length;
+    // Clear intervals when unmount
+    return () => {
+      if (pollingUpdaterList) {
+        pollingUpdaterList.forEach((updater) => {
+          stopUpdater(updater);
+        });
+        while (pollingUpdaterList.length) {
+          pollingUpdaterList.pop();
         }
       }
-      setGroups(groups);
-      setThisPublishHistory(histories);
-    } else if (selectedTargetName && publishHistory[selectedTargetName]) {
-      setThisPublishHistory(publishHistory[selectedTargetName]);
-      setGroups([
-        {
-          key: selectedTargetName,
-          name: selectedTargetName,
-          startIndex: 0,
-          count: publishHistory[selectedTargetName].length,
-          level: 0,
-        },
-      ]);
+    };
+  }, []);
+
+  // roll back
+  const rollbackToVersion = (version: PublishResult, item: BotStatus) => {
+    const setting = botPropertyData[item.id].setting;
+    const selectedTarget = item.publishTargets?.find((target) => target.name === item.publishTarget);
+    if (setting) {
+      const sensitiveSettings = getSensitiveProperties(setting);
+      rollbackToVersionDispatcher(item.id, selectedTarget, version.id, sensitiveSettings);
     }
-  }, [publishHistory, selectedTargetName, settings.publishTargets]);
+  };
 
-  // check history to see if a 202 is found
-  useEffect(() => {
-    // most recent item is a 202, which means we should poll for updates...
-    if (selectedTargetName !== 'all' && thisPublishHistory.length && thisPublishHistory[0].status === 202) {
-      getUpdatedStatus(selectedTarget);
-    } else if (selectedTarget && selectedTarget.lastPublished && thisPublishHistory.length === 0) {
-      // if the history is EMPTY, but we think we've done a publish based on lastPublished timestamp,
-      // we still poll for the results IF we see that a publish has happened previously
-      getPublishStatus(projectId, selectedTarget);
+  const onRollbackToVersion = (selectedVersion: PublishResult, item: BotStatus) => {
+    item.publishTarget && item.publishTargets && rollbackToVersion(selectedVersion, item);
+  };
+
+  const updatePublishStatus = async (data) => {
+    const { botProjectId, targetName, apiResponse } = data;
+    const publishTargets = botPropertyData[botProjectId].publishTargets;
+    if (!publishTargets) return;
+
+    const selectedTarget = publishTargets.find((target) => target.name === targetName);
+    // set recoil value
+    await getPublishStatusV2(botProjectId, selectedTarget, apiResponse);
+  };
+
+  const changeNotificationStatus = async (data) => {
+    const { botProjectId, targetName, apiResponse } = data;
+    const updater = pollingUpdaterList.find((i) => i.isSameUpdater(botProjectId, targetName));
+    const updatedBot = botList.find((bot) => bot.id === botProjectId);
+    if (!updatedBot || !updater) return;
+    const responseData = apiResponse.data;
+
+    if (responseData.status !== ApiStatus.Publishing) {
+      stopUpdater(updater);
+
+      // Show result notifications
+      const displayedNotifications = showNotificationsRef.current;
+      if (displayedNotifications[botProjectId]) {
+        const resultNotification = createNotification(getPublishedNotificationCardProps(updatedBot));
+        addNotification(resultNotification);
+        setTimeout(() => {
+          deleteNotification(resultNotification.id);
+          showNotificationsRef.current = { ...displayedNotifications, [botProjectId]: false };
+        }, deleteNotificationInterval);
+      }
     }
-  }, [thisPublishHistory, selectedTargetName]);
+  };
 
-  const savePublishTarget = useCallback(
-    async (name: string, type: string, configuration: string) => {
-      const targets = (settings.publishTargets || []).concat([
-        {
-          name,
-          type,
-          configuration,
-        },
-      ]);
-      await setPublishTargets(targets, projectId);
-      onSelectTarget(name);
-    },
-    [settings.publishTargets, projectId, botName]
-  );
+  const updateUpdaterStatus = (payload) => {
+    const { botProjectId, targetName, apiResponse } = payload;
+    const pending = apiResponse.data.status === ApiStatus.Publishing;
+    setUpdaterStatus({
+      ...updaterStatus,
+      [`${botProjectId}/${targetName}`]: pending,
+    });
+  };
 
-  const updatePublishTarget = useCallback(
-    async (name: string, type: string, configuration: string) => {
-      if (!editTarget) {
+  // updater onData function
+  const onReceiveUpdaterPayload = (payload) => {
+    updateUpdaterStatus(payload);
+    updatePublishStatus(payload);
+    changeNotificationStatus(payload);
+  };
+
+  const updateCheckedSkills = (checkedIds: string[]) => {
+    setCheckedSkillIds(checkedIds);
+  };
+
+  const manageSkillPublishProfile = (skillId: string) => {
+    const url =
+      skillId === projectId
+        ? `/bot/${projectId}/botProjectsSettings/#addNewPublishProfile`
+        : `bot/${projectId}/skill/${skillId}/botProjectsSettings/#addNewPublishProfile`;
+    navigateTo(url);
+  };
+
+  const publish = async (items: BotStatus[]) => {
+    // get token
+    let token = '';
+    if (isGetTokenFromUser()) {
+      token = getTokenFromCache('accessToken');
+    } else {
+      token = await AuthClient.getAccessToken(armScopes);
+    }
+
+    setPublishDialogVisiblity(false);
+    // notifications
+    showNotificationsRef.current = items.reduce((accumulator, item) => {
+      accumulator[item.id] = true;
+      return accumulator;
+    }, {});
+    const notification = createNotification(getPendingNotificationCardProps(items));
+    pendingNotificationRef.current = notification;
+    addNotification(notification);
+
+    // publish to remote
+    for (const bot of items) {
+      const setting = botPropertyData[bot.id].setting;
+      const publishTargets = botPropertyData[bot.id].publishTargets;
+      if (!(bot.publishTarget && publishTargets && setting)) {
         return;
       }
-
-      const targets = settings.publishTargets ? [...settings.publishTargets] : [];
-
-      targets[editTarget.index] = {
-        name,
-        type,
-        configuration,
-      };
-
-      await setPublishTargets(targets, projectId);
-
-      onSelectTarget(name);
-    },
-    [settings.publishTargets, projectId, botName, editTarget]
-  );
-
-  useEffect(() => {
-    setDialogProps({
-      title: formatMessage('Add a publish profile'),
-      type: DialogType.normal,
-      children: (
-        <CreatePublishTarget
-          closeDialog={() => setAddDialogHidden(true)}
-          current={null}
-          targets={settings.publishTargets || []}
-          types={publishTypes}
-          updateSettings={savePublishTarget}
-        />
-      ),
-    });
-  }, [publishTypes, savePublishTarget, settings.publishTargets]);
-
-  useEffect(() => {
-    setEditDialogProps({
-      title: formatMessage('Edit a publish profile'),
-      type: DialogType.normal,
-      children: (
-        <CreatePublishTarget
-          closeDialog={() => setEditDialogHidden(true)}
-          current={editTarget ? editTarget.item : null}
-          targets={(settings.publishTargets || []).filter((item) => editTarget && item.name != editTarget.item.name)}
-          types={publishTypes}
-          updateSettings={updatePublishTarget}
-        />
-      ),
-    });
-  }, [editTarget, publishTypes, updatePublishTarget]);
-
-  const rollbackToVersion = useMemo(
-    () => async (version) => {
-      const sensitiveSettings = settingsStorage.get(projectId);
-      await rollbackToVersionDispatcher(projectId, selectedTarget, version.id, sensitiveSettings);
-    },
-    [projectId, selectedTarget]
-  );
-
-  const publish = useMemo(
-    () => async (comment) => {
-      // publish to remote
-      if (selectedTarget && settings.publishTargets) {
-        if (settings.qna && Object(settings.qna).subscriptionKey) {
-          await setQnASettings(projectId, Object(settings.qna).subscriptionKey);
-        }
-        const sensitiveSettings = settingsStorage.get(projectId);
-        await publishToTarget(projectId, selectedTarget, { comment: comment }, sensitiveSettings);
+      if (bot.publishTarget && publishTargets) {
+        const selectedTarget = publishTargets.find((target) => target.name === bot.publishTarget);
+        const botProjectId = bot.id;
+        setting.qna.subscriptionKey && (await setQnASettings(botProjectId, setting.qna.subscriptionKey));
+        const sensitiveSettings = getSensitiveProperties(setting);
+        await publishToTarget(botProjectId, selectedTarget, { comment: bot.comment }, sensitiveSettings, token);
 
         // update the target with a lastPublished date
-        const updatedPublishTargets = settings.publishTargets.map((profile) => {
-          if (profile.name === selectedTarget.name) {
+        const updatedPublishTargets = publishTargets.map((profile) => {
+          if (profile.name === selectedTarget?.name) {
             return {
               ...profile,
               lastPublished: new Date(),
@@ -360,155 +258,105 @@ const Publish: React.FC<RouteComponentProps<{ projectId: string; targetName?: st
           }
         });
 
-        await setPublishTargets(updatedPublishTargets, projectId);
+        await setPublishTargets(updatedPublishTargets, botProjectId);
+        const updater = pollingUpdaterList.find((u) => u.isSameUpdater(botProjectId, bot.publishTarget || ''));
+        updater?.restart(onReceiveUpdaterPayload);
       }
-    },
-    [projectId, selectedTarget, settings.publishTargets]
-  );
-
-  const onEdit = async (index: number, item: PublishTarget) => {
-    const newItem = { item: item, index: index };
-    setEditTarget(newItem);
-    setEditDialogHidden(false);
+    }
   };
 
-  const onDelete = useMemo(
-    () => async (index: number) => {
-      const result = await OpenConfirmModal(
-        formatMessage('This will delete the profile. Do you wish to continue?'),
-        null,
-        {
-          confirmBtnText: formatMessage('Yes'),
-          cancelBtnText: formatMessage('Cancel'),
-        }
+  const changePublishTarget = (publishTarget, currentBotStatus) => {
+    const target = currentBotStatus.publishTargets.find((t) => t.name === publishTarget);
+    if (currentBotList.some((targetMap) => targetMap.id === currentBotStatus.id)) {
+      setCurrentBotList(
+        currentBotList.map((targetMap) => {
+          if (targetMap.id === currentBotStatus.id) {
+            targetMap.publishTarget = publishTarget;
+          }
+          return targetMap;
+        })
       );
+    } else {
+      setCurrentBotList([...currentBotList, { id: currentBotStatus.id, name: currentBotStatus.name, publishTarget }]);
+    }
 
-      if (result) {
-        if (settings.publishTargets && settings.publishTargets.length > index) {
-          const targets = settings.publishTargets.slice(0, index).concat(settings.publishTargets.slice(index + 1));
-          await setPublishTargets(targets, projectId);
-          // redirect to all profiles
-          setSelectedTarget(undefined);
-          onSelectTarget('all');
-        }
-      }
-    },
-    [settings.publishTargets, projectId, botName]
-  );
+    getPublishHistory(currentBotStatus.id, target);
 
-  useEffect(() => {
-    setCurrentPageMode('notifications');
-  }, []);
+    // Add new updater
+    if (!pollingUpdaterList.some((u) => u.isSameUpdater(currentBotStatus.id, publishTarget))) {
+      const newUpdater = new PublishStatusPollingUpdater(currentBotStatus.id, publishTarget);
+      newUpdater.start(onReceiveUpdaterPayload);
+      pollingUpdaterList.push(newUpdater);
+    }
+  };
 
   return (
     <Fragment>
-      <Dialog
-        dialogContentProps={dialogProps}
-        hidden={addDialogHidden}
-        minWidth={450}
-        modalProps={{ isBlocking: true }}
-        onDismiss={() => setAddDialogHidden(true)}
-      >
-        {dialogProps.children}
-      </Dialog>
-      <Dialog
-        dialogContentProps={editDialogProps}
-        hidden={editDialogHidden}
-        minWidth={450}
-        modalProps={{ isBlocking: true }}
-        onDismiss={() => setEditDialogHidden(true)}
-      >
-        {editDialogProps.children}
-      </Dialog>
-      {!publishDialogHidden && (
+      {showAuthDialog && (
+        <AuthDialog
+          needGraph={false}
+          next={() => setPublishDialogVisiblity(true)}
+          onDismiss={() => {
+            setShowAuthDialog(false);
+          }}
+        />
+      )}
+      {publishDialogVisible && (
         <PublishDialog
-          projectId={projectId}
-          target={selectedTarget}
-          onDismiss={() => setPublishDialogHidden(true)}
+          items={selectedBots.filter((bot) => !!bot.publishTarget)}
+          onDismiss={() => setPublishDialogVisiblity(false)}
           onSubmit={publish}
         />
       )}
-      {!pullDialogHidden && (
-        <PullDialog projectId={projectId} selectedTarget={selectedTarget} onDismiss={() => setPullDialogHidden(true)} />
-      )}
-      {showLog && <LogDialog version={selectedVersion} onDismiss={() => setShowLog(false)} />}
-      <Toolbar toolbarItems={toolbarItems} />
+      {pullDialogVisible &&
+        selectedBots.map((bot, index) => {
+          const publishTargets = botPropertyData[bot.id].publishTargets;
+          const selectedTarget = publishTargets?.find((target) => target.name === bot.publishTarget);
+          const botProjectId = bot.id;
+          return (
+            <PullDialog
+              key={index}
+              projectId={botProjectId}
+              selectedTarget={selectedTarget}
+              onDismiss={() => setPullDialogVisiblity(false)}
+            />
+          );
+        })}
+      <PublishToolbar
+        canPublish={canPublish}
+        canPull={canPull}
+        onPublish={() => {
+          if (isShowAuthDialog(false)) {
+            setShowAuthDialog(true);
+          } else {
+            setPublishDialogVisiblity(true);
+          }
+          TelemetryClient.track('ToolbarButtonClicked', { name: 'publishSelectedBots' });
+        }}
+        onPull={() => {
+          setPullDialogVisiblity(true);
+          TelemetryClient.track('ToolbarButtonClicked', { name: 'pullFromProfile' });
+        }}
+      />
       <div css={ContentHeaderStyle}>
-        <h1 css={HeaderText}>{selectedTarget ? selectedTargetName : formatMessage('Publish Profiles')}</h1>
+        <h1 css={HeaderText}>{formatMessage('Publish your bots')}</h1>
       </div>
       <div css={ContentStyle} data-testid="Publish" role="main">
-        <LeftRightSplit initialLeftGridWidth="20%" minLeftPixels={200} minRightPixels={800}>
-          <div
-            aria-label={formatMessage('Navigation panel')}
-            css={projectContainer}
-            data-testid="target-list"
-            role="region"
-          >
-            <div
-              key={'_all'}
-              css={selectedTargetName === 'all' ? targetSelected : overflowSet}
-              style={{
-                height: '36px',
-                cursor: 'pointer',
-              }}
-              onClick={() => {
-                setSelectedTarget(undefined);
-                onSelectTarget('all');
-              }}
-            >
-              {formatMessage('All profiles')}
-            </div>
-            {settings && settings.publishTargets && (
-              <TargetList
-                list={settings.publishTargets}
-                selectedTarget={selectedTargetName}
-                onDelete={async (index) => await onDelete(index)}
-                onEdit={async (item, target) => await onEdit(item, target)}
-                onSelect={(item) => {
-                  setSelectedTarget(item);
-                  onSelectTarget(item.name);
-                }}
-              />
-            )}
-          </div>
-          <div aria-label={formatMessage('List view')} css={contentEditor} role="region">
-            <Fragment>
-              <PublishStatusList
-                groups={groups}
-                items={thisPublishHistory}
-                updateItems={setThisPublishHistory}
-                onItemClick={setSelectedVersion}
-              />
-              {!thisPublishHistory || thisPublishHistory.length === 0 ? (
-                <div style={{ marginLeft: '50px', fontSize: 'smaller', marginTop: '20px' }}>No publish history</div>
-              ) : null}
-            </Fragment>
-          </div>
-        </LeftRightSplit>
+        <div aria-label={formatMessage('List view')} css={contentEditor} role="region">
+          <BotStatusList
+            botPublishHistoryList={publishHistoryList}
+            botStatusList={botStatusList}
+            checkedIds={checkedSkillIds}
+            disableCheckbox={isPublishPending}
+            onChangePublishTarget={changePublishTarget}
+            onCheck={updateCheckedSkills}
+            onManagePublishProfile={manageSkillPublishProfile}
+            onRollbackClick={onRollbackToVersion}
+          />
+        </div>
       </div>
     </Fragment>
   );
 };
 
 export default Publish;
-const LogDialog = (props) => {
-  const logDialogProps = {
-    title: 'Publish Log',
-  };
-  return (
-    <Dialog
-      dialogContentProps={logDialogProps}
-      hidden={false}
-      minWidth={700}
-      modalProps={{ isBlocking: true }}
-      onDismiss={props.onDismiss}
-    >
-      <TextField
-        multiline
-        placeholder="Log Output"
-        style={{ minHeight: 300 }}
-        value={props && props.version ? props.version.log : ''}
-      />
-    </Dialog>
-  );
-};

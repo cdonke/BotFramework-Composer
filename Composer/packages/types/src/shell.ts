@@ -2,15 +2,32 @@
 // Licensed under the MIT License.
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import type { DialogInfo, LuFile, LgFile, QnAFile, LuIntentSection, LgTemplate, DialogSchemaFile } from './indexers';
-import type { ILUFeaturesConfig, SkillSetting, UserSettings } from './settings';
-import type { JSONSchema7 } from './schema';
+import { AxiosInstance } from 'axios';
+
+import { IDiagnostic } from './diagnostic';
+import type {
+  DialogInfo,
+  LuFile,
+  LgFile,
+  QnAFile,
+  LuIntentSection,
+  LgTemplate,
+  DialogSchemaFile,
+  LuProviderType,
+} from './indexers';
+import type { JSONSchema7, SDKKinds } from './schema';
+import { Skill } from './indexers';
+import type { ILUFeaturesConfig, SkillSetting, UserSettings, DialogSetting } from './settings';
 import { MicrosoftIDialog } from './sdk';
+import { FeatureFlagKey } from './featureFlags';
+import { TelemetryClient } from './telemetry';
 
 /** Recursively marks all properties as optional. */
-type AllPartial<T> = {
-  [P in keyof T]?: T[P] extends (infer U)[] ? AllPartial<U>[] : T[P] extends object ? AllPartial<T[P]> : T[P];
-};
+// type AllPartial<T> = {
+//   [P in keyof T]?: T[P] extends (infer U)[] ? AllPartial<U>[] : T[P] extends object ? AllPartial<T[P]> : T[P];
+// };
+
+export type HttpClient = AxiosInstance;
 
 export type ZoomInfo = {
   rateList: number[];
@@ -33,6 +50,7 @@ type UISchema = {
     menu?: any;
   };
 };
+
 export type BotSchemas = {
   default?: JSONSchema7;
   sdk?: any;
@@ -41,18 +59,33 @@ export type BotSchemas = {
   diagnostics?: any[];
 };
 
+export type DisabledMenuActions = {
+  kind: SDKKinds;
+  reason: string;
+};
+
 export type ApplicationContextApi = {
-  navTo: (path: string, rest?: any) => void;
-  updateUserSettings: (settings: AllPartial<UserSettings>) => void;
+  navigateTo: (to: string, opts?: { state?: any; replace?: boolean }) => void;
+  updateUserSettings: (settings: Partial<UserSettings>) => void;
   announce: (message: string) => void;
   addCoachMarkRef: (ref: { [key: string]: any }) => void;
+  isFeatureEnabled: (featureFlagKey: FeatureFlagKey) => boolean;
+  setApplicationLevelError: (err: any) => void;
+  confirm: (title: string, subTitle: string, settings?: any) => Promise<boolean>;
+  telemetryClient: TelemetryClient;
 };
 
 export type ApplicationContext = {
   locale: string;
   hosted: boolean;
   userSettings: UserSettings;
+  skills: Record<string, Skill>;
+  skillsSettings: Record<string, SkillSetting>;
+  // TODO: remove
+  schemas: BotSchemas;
   flowZoomRate: ZoomInfo;
+
+  httpClient: HttpClient;
 };
 
 export type LuContextApi = {
@@ -78,8 +111,11 @@ export type LgContextApi = {
 };
 
 export type ProjectContextApi = {
+  getMemoryVariables: (projectId: string, options?: { signal: AbortSignal }) => Promise<string[]>;
   getDialog: (dialogId: string) => any;
   saveDialog: (dialogId: string, newDialogData: any) => any;
+  reloadProject: () => void;
+  navTo: (path: string) => void;
 
   updateQnaContent: (id: string, content: string) => void;
   updateRegExIntent: (id: string, intentName: string, pattern: string) => void;
@@ -87,27 +123,43 @@ export type ProjectContextApi = {
   updateIntentTrigger: (id: string, intentName: string, newIntentName: string) => void;
   createDialog: (actions: any) => Promise<string | null>;
   commitChanges: () => void;
-  addSkillDialog: () => Promise<{ manifestUrl: string; name: string } | null>;
   displayManifestModal: (manifestId: string) => void;
   updateDialogSchema: (_: DialogSchemaFile) => Promise<void>;
   createTrigger: (id: string, formData, autoSelected?: boolean) => void;
   createQnATrigger: (id: string) => void;
-  updateSkillSetting: (skillId: string, skillsData: SkillSetting) => Promise<void>;
   updateFlowZoomRate: (currentRate: number) => void;
+  updateSkill: (skillId: string, skillsData: { skill: Skill; selectedEndpointIndex: number }) => Promise<void>;
+  updateRecognizer: (projectId: string, dialogId: string, kind: LuProviderType) => void;
+};
+
+export type BotInProject = {
+  dialogs: DialogInfo[];
+  projectId: string;
+  name: string;
+  isRemote: boolean;
+  isRootBot: boolean;
+  diagnostics: IDiagnostic[];
+  error: { [key: string]: any };
+  buildEssentials: { [key: string]: any };
+  isPvaSchema: boolean;
+  setting: DialogSetting;
 };
 
 export type ProjectContext = {
   botName: string;
   projectId: string;
+  projectCollection: BotInProject[];
   dialogs: DialogInfo[];
   dialogSchemas: DialogSchemaFile[];
   lgFiles: LgFile[];
   luFiles: LuFile[];
   luFeatures: ILUFeaturesConfig;
   qnaFiles: QnAFile[];
-  skills: any[];
+  skills: Record<string, Skill>;
   skillsSettings: Record<string, SkillSetting>;
   schemas: BotSchemas;
+  forceDisabledActions: DisabledMenuActions[];
+  settings: DialogSetting;
 };
 
 export type ActionContextApi = {
@@ -122,6 +174,7 @@ export type ActionContextApi = {
 
 export type DialogEditingContextApi = {
   saveData: <T = any>(newData: T, updatePath?: string, callback?: () => void | Promise<void>) => Promise<void>;
+  onOpenDialog: (dialogId: string) => Promise<void>;
   onFocusSteps: (stepIds: string[], focusedTab?: string) => Promise<void>;
   onFocusEvent: (eventId: string) => Promise<void>;
   onSelect: (ids: string[]) => void;

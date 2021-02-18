@@ -10,15 +10,10 @@ import get from 'lodash/get';
 import VisualDesigner from '@bfc/adaptive-flow';
 import { useRecoilValue } from 'recoil';
 import { useFormConfig, useShellApi } from '@bfc/extension-client';
-import cloneDeep from 'lodash/cloneDeep';
+import clone from 'lodash/clone';
 
 import grayComposerIcon from '../../images/grayComposerIcon.svg';
-import {
-  dispatcherState,
-  validateDialogsSelectorFamily,
-  schemasState,
-  designPageLocationState,
-} from '../../recoilModel';
+import { dispatcherState, dialogsSelectorFamily, schemasState, designPageLocationState } from '../../recoilModel';
 
 import { middleTriggerContainer, middleTriggerElements, triggerButton, visualEditor } from './styles';
 
@@ -27,11 +22,16 @@ const addIconProps = {
   styles: { root: { fontSize: '12px' } },
 };
 
-function onRenderBlankVisual(isTriggerEmpty, onClickAddTrigger) {
+function onRenderBlankVisual(isTriggerEmpty, onClickAddTrigger, isRemoteSkill) {
   return (
     <div css={middleTriggerContainer}>
       <div css={middleTriggerElements}>
-        {isTriggerEmpty ? (
+        {isRemoteSkill ? (
+          <React.Fragment>
+            <img alt={formatMessage('bot framework composer icon gray')} src={grayComposerIcon} />
+            {formatMessage('Remote skill')}
+          </React.Fragment>
+        ) : isTriggerEmpty ? (
           <React.Fragment>
             {formatMessage(`This dialog has no trigger yet.`)}
             <ActionButton
@@ -58,15 +58,16 @@ interface VisualEditorProps {
   openNewTriggerModal: () => void;
   onFocus?: (event: React.FocusEvent<HTMLDivElement>) => void;
   onBlur?: (event: React.FocusEvent<HTMLDivElement>) => void;
+  isRemoteSkill?: boolean;
 }
 
 const VisualEditor: React.FC<VisualEditorProps> = (props) => {
   const { ...shellData } = useShellApi();
   const { projectId, currentDialog } = shellData;
-  const { openNewTriggerModal, onFocus, onBlur } = props;
+  const { openNewTriggerModal, onFocus, onBlur, isRemoteSkill } = props;
   const [triggerButtonVisible, setTriggerButtonVisibility] = useState(false);
   const { onboardingAddCoachMarkRef } = useRecoilValue(dispatcherState);
-  const dialogs = useRecoilValue(validateDialogsSelectorFamily(projectId));
+  const dialogs = useRecoilValue(dialogsSelectorFamily(projectId));
   const schemas = useRecoilValue(schemasState(projectId));
   const designPageLocation = useRecoilValue(designPageLocationState(projectId));
   const { dialogId, selected } = designPageLocation;
@@ -75,22 +76,22 @@ const VisualEditor: React.FC<VisualEditorProps> = (props) => {
 
   const formConfig = useFormConfig();
   const overridedSDKSchema = useMemo(() => {
-    const sdkSchema = cloneDeep(schemas.sdk?.content ?? {});
-    const sdkDefinitions = sdkSchema.definitions;
-
+    if (!dialogId) return {};
+    const sdkSchema = schemas.sdk?.content ?? {};
+    const sdkDefinitions = clone(sdkSchema.definitions) ?? {};
     // Override the sdk.schema 'title' field with form ui option 'label' field
     // to make sure the title is consistent with Form Editor.
     Object.entries(formConfig).forEach(([$kind, formOptions]) => {
-      if (formOptions && sdkDefinitions[$kind]) {
-        sdkDefinitions[$kind].title = formOptions?.label;
+      const sdkOptions = sdkDefinitions[$kind];
+      if (formOptions && sdkOptions) {
+        sdkDefinitions[$kind] = { ...sdkOptions, title: formOptions.label };
       }
     });
-    return sdkSchema;
-  }, [formConfig, schemas]);
-
+    return { ...sdkSchema, definitions: sdkDefinitions };
+  }, [formConfig, schemas, dialogId]);
   useEffect(() => {
     const dialog = dialogs.find((d) => d.id === dialogId);
-    const visible = get(dialog, 'triggers', []).length === 0;
+    const visible = dialog ? get(dialog, 'triggers', []).length === 0 : false;
     setTriggerButtonVisibility(visible);
   }, [dialogs, dialogId]);
 
@@ -102,14 +103,16 @@ const VisualEditor: React.FC<VisualEditorProps> = (props) => {
         css={visualEditor(triggerButtonVisible || !selected)}
         data-testid="VisualEditor"
       >
-        <VisualDesigner
-          data={currentDialog.content ?? {}}
-          schema={overridedSDKSchema}
-          onBlur={onBlur}
-          onFocus={onFocus}
-        />
+        {!isRemoteSkill ? (
+          <VisualDesigner
+            data={currentDialog.content ?? {}}
+            schema={overridedSDKSchema}
+            onBlur={onBlur}
+            onFocus={onFocus}
+          />
+        ) : null}
       </div>
-      {!selected && onRenderBlankVisual(triggerButtonVisible, openNewTriggerModal)}
+      {!selected && onRenderBlankVisual(triggerButtonVisible, openNewTriggerModal, isRemoteSkill)}
     </React.Fragment>
   );
 };

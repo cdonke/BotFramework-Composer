@@ -41,10 +41,16 @@ describe('<AppSettings /> & <ElectronSettings />', () => {
           lineNumbers: false,
           wordWrap: false,
           minimap: false,
+          fontSettings: {
+            fontFamily: 'monospace',
+            fontSize: '18px',
+            fontWeight: '400',
+          },
         },
         propertyEditorWidth: 400,
         dialogNavWidth: 180,
         appLocale: 'en-US',
+        telemetry: {},
       });
     });
     getByText('Auto update');

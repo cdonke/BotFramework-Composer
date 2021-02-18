@@ -32,7 +32,7 @@ const LuisIntentEditor: React.FC<FieldProps<string>> = (props) => {
 
   const luIntent = useMemo(() => {
     return (
-      (luFile && luFile.intents.find((intent) => intent.Name === intentName)) ||
+      luFile?.intents.find((intent) => intent.Name === intentName) ||
       ({
         Name: intentName,
         Body: '',
@@ -54,7 +54,7 @@ const LuisIntentEditor: React.FC<FieldProps<string>> = (props) => {
     onChange(intentName);
   };
 
-  const handleSettingsChange = (settings: Partial<CodeEditorSettings>) => {
+  const handleSettingsChange = (settings: CodeEditorSettings) => {
     shellApi.updateUserSettings({ codeEditor: settings });
   };
 

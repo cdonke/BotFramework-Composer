@@ -4,8 +4,9 @@
 import { useRecoilCallback, CallbackInterface } from 'recoil';
 import isArray from 'lodash/isArray';
 import formatMessage from 'format-message';
-import { FeatureFlagKey, FeatureFlagMap } from '@bfc/shared';
+import { FeatureFlagMap, FeatureFlagKey } from '@botframework-composer/types';
 
+import TelemetryClient from '../../telemetry/TelemetryClient';
 import httpClient from '../../utils/httpUtil';
 import {
   storagesState,
@@ -143,7 +144,7 @@ export const storageDispatcher = () => {
     try {
       const response = await httpClient.get(`/assets/projectTemplates`);
 
-      const data = response && response.data;
+      const data = response?.data;
 
       if (data && Array.isArray(data) && data.length > 0) {
         callbackHelpers.set(templateProjectsState, data);
@@ -151,6 +152,26 @@ export const storageDispatcher = () => {
     } catch (err) {
       // TODO: Handle exceptions
       logMessage(callbackHelpers, `Error fetching runtime templates: ${err}`);
+    }
+  });
+
+  const fetchTemplatesV2 = useRecoilCallback(({ set }: CallbackInterface) => async (feedUrls?: string[]) => {
+    try {
+      const response = await httpClient.post(`v2/assets/projectTemplates`, {
+        feedUrls: feedUrls,
+        getFirstPartyNpm: false,
+      });
+
+      const data = response?.data;
+
+      if (data && Array.isArray(data) && data.length > 0) {
+        set(templateProjectsState, data);
+      }
+    } catch (err) {
+      set(applicationErrorState, {
+        message: err.message,
+        summary: formatMessage('Error fetching runtime templates'),
+      });
     }
   });
 
@@ -190,6 +211,8 @@ export const storageDispatcher = () => {
       });
       // update server
       await httpClient.post(`/featureFlags`, { featureFlags: newFeatureFlags });
+
+      TelemetryClient.track('FeatureFlagChanged', { featureFlag: featureName, enabled });
     }
   );
 
@@ -203,6 +226,7 @@ export const storageDispatcher = () => {
     createFolder,
     updateFolder,
     fetchTemplates,
+    fetchTemplatesV2,
     fetchRuntimeTemplates,
     fetchFeatureFlags,
     toggleFeatureFlag,

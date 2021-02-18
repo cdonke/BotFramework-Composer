@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { selectorFamily, useRecoilState, useRecoilValue, useSetRecoilState } from 'recoil';
-import { act, RenderHookResult } from '@botframework-composer/test-utils/lib/hooks';
+import { act, RenderHookResult, HookResult } from '@botframework-composer/test-utils/lib/hooks';
 import noop from 'lodash/noop';
 
 import { renderRecoilHook } from '../../../../__tests__/testUtils';
@@ -13,13 +13,13 @@ import {
   botProjectIdsState,
   projectMetaDataState,
 } from '../../atoms';
-import { botProjectSpaceSelector, botsForFilePersistenceSelector, rootBotProjectIdSelector } from '../project';
+import { botProjectSpaceSelector, rootBotProjectIdSelector, localBotsWithoutErrorsSelector } from '../project';
 
 const projectIds = ['123-a', '234-bc', '567-de'];
 
 const projectDataSelector = selectorFamily({
   key: 'project-data-selector',
-  get: (projectId: string) => noop,
+  get: () => noop,
   set: (projectId: string) => ({ set }, stateUpdater: any) => {
     const { metadata, botError, displayName } = stateUpdater;
     if (metadata) {
@@ -38,7 +38,7 @@ const projectDataSelector = selectorFamily({
 
 const useRecoilTestHook = () => {
   const [botProjectIds, setBotProjectIds] = useRecoilState(botProjectIdsState);
-  const botsForFilePersistence = useRecoilValue(botsForFilePersistenceSelector);
+  const botsForFilePersistence = useRecoilValue(localBotsWithoutErrorsSelector);
   const rootBotProjectId = useRecoilValue(rootBotProjectIdSelector);
   const botProjectSpace = useRecoilValue(botProjectSpaceSelector);
   const rootBotDataSelector = useSetRecoilState(projectDataSelector(projectIds[0]));
@@ -62,7 +62,7 @@ const useRecoilTestHook = () => {
   };
 };
 
-let renderedComponent;
+let renderedComponent: HookResult<ReturnType<typeof useRecoilTestHook>>;
 
 beforeEach(() => {
   const rendered: RenderHookResult<unknown, ReturnType<typeof useRecoilTestHook>> = renderRecoilHook(

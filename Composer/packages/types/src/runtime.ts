@@ -59,7 +59,16 @@ export type RuntimeTemplate = {
 
   run: (project: IBotProject, localDisk?: any) => Promise<void>;
 
-  identifyManifest: (runtimePath: string) => string;
+  installComponent: (
+    runtimePath: string,
+    componentName: string,
+    version: string,
+    project: IBotProject
+  ) => Promise<string>;
+
+  uninstallComponent: (runtimePath: string, componentName: string, project: IBotProject) => Promise<string>;
+
+  identifyManifest: (runtimePath: string, projName?: string) => string;
 
   /** build for deploy method */
   buildDeploy: (

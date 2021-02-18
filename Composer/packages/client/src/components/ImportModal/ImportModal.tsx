@@ -70,6 +70,7 @@ export const ImportModal: React.FC<RouteComponentProps> = (props) => {
       templateDir,
       urlSuffix,
     };
+
     let creationUrl = `/projects/create/${encodeURIComponent(source)}`;
 
     const searchParams = new URLSearchParams();
@@ -129,7 +130,7 @@ export const ImportModal: React.FC<RouteComponentProps> = (props) => {
   useEffect(() => {
     if (modalState === 'downloadingContent') {
       const importBotContent = async () => {
-        if (location && location.href) {
+        if (location?.href) {
           try {
             const { description, name } = importPayload;
 
@@ -198,7 +199,7 @@ export const ImportModal: React.FC<RouteComponentProps> = (props) => {
   }, [modalState, importSource, importPayload]);
 
   useEffect(() => {
-    if (location && location.href) {
+    if (location?.href) {
       try {
         // parse data from url and store in state
         const url = new URL(location.href);

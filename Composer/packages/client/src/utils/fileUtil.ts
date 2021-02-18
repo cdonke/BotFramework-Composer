@@ -12,19 +12,25 @@ import { File } from '../recoilModel/types';
 
 import httpClient from './httpUtil';
 
-export function getExtension(filename?: string): string | any {
-  if (typeof filename !== 'string') return filename;
-  return filename.substring(filename.lastIndexOf('.') + 1, filename.length) || filename;
+export function getExtension(filename: string) {
+  if (typeof filename === 'string') {
+    return filename.substring(filename.lastIndexOf('.') + 1, filename.length) || filename;
+  }
+  return filename;
 }
 
-export function getBaseName(filename?: string): string | any {
-  if (typeof filename !== 'string') return filename;
-  return filename.substring(0, filename.lastIndexOf('.')) || filename;
+export function getBaseName(filename: string) {
+  if (typeof filename === 'string') {
+    return filename.substring(0, filename.lastIndexOf('.')) || filename;
+  }
+  return filename;
 }
 
-export function upperCaseName(filename?: string): string | any {
-  if (typeof filename !== 'string') return filename;
-  return filename.charAt(0).toUpperCase() + filename.slice(1);
+export function upperCaseName(filename: string) {
+  if (typeof filename === 'string') {
+    return filename.charAt(0).toUpperCase() + filename.slice(1);
+  }
+  return filename;
 }
 
 export function resolveToBasePath(base: string, relPath: string) {
@@ -56,7 +62,7 @@ export function getFileIconName(file: File) {
 }
 
 export function getFileEditDate(file: File) {
-  if (file && file.lastModified) {
+  if (file?.lastModified) {
     return new Date(file.lastModified).toLocaleDateString();
   }
 
@@ -66,7 +72,7 @@ export function getFileEditDate(file: File) {
 export function formatBytes(bytes?: number, decimals?: number) {
   if (bytes === 0 || !bytes) return formatMessage('0 Bytes');
   const k = 1024,
-    dm = !decimals || decimals <= 0 ? 0 : decimals || 2,
+    dm = !decimals || decimals <= 0 ? 0 : decimals || 2, // lgtm [js/trivial-conditional]
     sizes = [
       formatMessage('Bytes'),
       formatMessage('KB'),
@@ -121,5 +127,7 @@ export const getFileNameFromPath = (param: string, ext: string | undefined = und
 };
 
 export const getAbsolutePath = (basePath: string, relativePath: string) => {
+  // note: in windows, path.resolve result will prefix with /
+  // https://github.com/jinder/path/issues/18
   return path.resolve(basePath, relativePath);
 };

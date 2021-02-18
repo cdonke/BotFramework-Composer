@@ -6,6 +6,8 @@ import { UserIdentity } from '@bfc/extension';
 import has from 'lodash/has';
 import get from 'lodash/get';
 import set from 'lodash/set';
+import unset from 'lodash/unset';
+import omit from 'lodash/omit';
 
 import { Path } from '../../utility/path';
 import log from '../../logger';
@@ -13,7 +15,15 @@ import log from '../../logger';
 import { FileSettingManager } from './fileSettingManager';
 const debug = log.extend('default-settings-manager');
 
-const newSettingsValuePath = ['downsampling', 'luis.endpoint', 'luis.authoringEndpoint', 'skillConfiguration'];
+const newSettingsValuePath = [
+  'downsampling',
+  'luis.endpoint',
+  'luis.authoringEndpoint',
+  'skillConfiguration',
+  'customFunctions',
+];
+
+const discardedSettingsValuePath = ['downsampling.maxUtteranceAllowed'];
 
 export class DefaultSettingManager extends FileSettingManager {
   constructor(basePath: string, user?: UserIdentity) {
@@ -26,12 +36,13 @@ export class DefaultSettingManager extends FileSettingManager {
         UseShowTypingMiddleware: false,
         UseInspectionMiddleware: false,
         RemoveRecipientMention: false,
+        UseSetSpeakMiddleware: false,
       },
       MicrosoftAppPassword: '',
       MicrosoftAppId: '',
       cosmosDb: {
         authKey: '',
-        collectionId: 'botstate-collection',
+        containerId: 'botstate-container',
         cosmosDBEndpoint: '',
         databaseId: 'botstate-db',
       },
@@ -41,6 +52,10 @@ export class DefaultSettingManager extends FileSettingManager {
       blobStorage: {
         connectionString: '',
         container: 'transcripts',
+      },
+      speech: {
+        voiceFontName: 'en-US-AriaNeural',
+        fallbackToTextForSpeechIfEmpty: true,
       },
       luis: {
         name: '',
@@ -77,18 +92,21 @@ export class DefaultSettingManager extends FileSettingManager {
         customRuntime: false,
         path: '',
         command: '',
+        key: '',
       },
       downsampling: {
-        maxImbalanceRatio: 10,
-        maxUtteranceAllowed: 15000,
+        maxImbalanceRatio: -1,
       },
       skillConfiguration: {
-        isSkill: false,
-        allowedCallers: ['*'],
+        // TODO: Setting isSkill property to true for now. A runtime change is required to remove dependancy on isSkill prop #4501
+        isSkill: true,
+        allowedCallers: [],
       },
       skill: {},
       defaultLanguage: 'en-us',
       languages: ['en-us'],
+      customFunctions: [],
+      importedLibraries: [],
     };
   };
 
@@ -103,23 +121,20 @@ export class DefaultSettingManager extends FileSettingManager {
       }
     });
 
+    discardedSettingsValuePath.forEach((jsonPath: string) => {
+      if (has(result, jsonPath)) {
+        unset(result, jsonPath);
+        updateFile = true;
+      }
+    });
+
     if (updateFile) {
       this.set(result);
     }
-
     return result;
   }
 
-  private filterOutSensitiveValue = (obj: any) => {
-    if (obj && typeof obj === 'object') {
-      SensitiveProperties.map((key) => {
-        set(obj, key, '');
-      });
-      return obj;
-    }
-  };
-
-  public set = async (settings: any): Promise<void> => {
+  public set = async (settings: DialogSetting): Promise<void> => {
     const path = this.getPath();
     const dir = Path.dirname(path);
     if (!(await this.storage.exists(dir))) {
@@ -127,7 +142,7 @@ export class DefaultSettingManager extends FileSettingManager {
       await this.storage.mkDir(dir, { recursive: true });
     }
     // remove sensitive values before saving to disk
-    const settingsWithoutSensitive = this.filterOutSensitiveValue(settings);
+    const settingsWithoutSensitive = omit(settings, SensitiveProperties);
 
     await this.storage.writeFile(path, JSON.stringify(settingsWithoutSensitive, null, 2));
   };

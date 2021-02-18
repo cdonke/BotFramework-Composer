@@ -11,6 +11,7 @@ import { IModalStyles } from 'office-ui-fabric-react/lib/Modal';
 export enum DialogTypes {
   CreateFlow,
   DesignFlow,
+  Customer,
 }
 
 // -------------------- Styles -------------------- //
@@ -61,14 +62,34 @@ const styles: {
 
 interface DialogWrapperProps extends Pick<IDialogProps, 'onDismiss'> {
   isOpen: boolean;
-  title: string;
-  subText: string;
+  isBlocking?: boolean;
+  title?: string;
+  subText?: string;
   dialogType: DialogTypes;
+  customerStyle?: {
+    dialog?: Record<string, any>;
+    modal?: Record<string, any>;
+  };
+  minWidth?: number;
 }
 
 export const DialogWrapper: React.FC<DialogWrapperProps> = (props) => {
-  const { isOpen, onDismiss, title, subText, children, dialogType } = props;
+  const {
+    isOpen,
+    onDismiss,
+    title = '',
+    subText = '',
+    children,
+    dialogType,
+    isBlocking,
+    customerStyle = { dialog: {}, modal: {} },
+    minWidth,
+  } = props;
+  /* add customer styles to the array */
+  styles[DialogTypes.Customer] = customerStyle;
+
   const [currentStyle, setStyle] = useState(styles[dialogType]);
+
   useEffect(() => {
     if (dialogType) {
       setStyle(styles[dialogType]);
@@ -88,8 +109,9 @@ export const DialogWrapper: React.FC<DialogWrapperProps> = (props) => {
         styles: currentStyle.dialog,
       }}
       hidden={false}
+      minWidth={minWidth}
       modalProps={{
-        isBlocking: false,
+        isBlocking: isBlocking,
         styles: currentStyle.modal,
       }}
       onDismiss={onDismiss}

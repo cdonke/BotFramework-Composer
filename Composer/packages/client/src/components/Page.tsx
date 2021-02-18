@@ -2,14 +2,19 @@
 // Licensed under the MIT License.
 
 /** @jsx jsx */
-import { jsx, css } from '@emotion/core';
+import { jsx, css, SerializedStyles } from '@emotion/core';
 import React from 'react';
 import { FontWeights, FontSizes } from 'office-ui-fabric-react/lib/Styling';
+import { Toolbar, IToolbarItem } from '@bfc/ui-shared';
+import { useRecoilValue } from 'recoil';
+import { Split, SplitMeasuredSizes } from '@geoffcox/react-splitter';
 
-import { LeftRightSplit } from '../components/Split/LeftRightSplit';
+import { navigateTo, buildURL } from '../utils/navigation';
+import { dispatcherState, PageMode } from '../recoilModel';
 
-import { Toolbar, IToolbarItem } from './Toolbar';
 import { NavTree, INavTreeItem } from './NavTree';
+import { ProjectTree } from './ProjectTree/ProjectTree';
+import { renderThinSplitter } from './Split/ThinSplitter';
 
 // -------------------- Styles -------------------- //
 
@@ -50,7 +55,7 @@ export const headerTitle = css`
 export const headerContent = css`
   display: flex;
   align-items: center;
-
+  font-size: ${FontSizes.smallPlus};
   label: PageHeaderContent;
 `;
 
@@ -69,46 +74,118 @@ export const main = css`
   label: PageMain;
 `;
 
-export const content = css`
+export const content = (shouldShowEditorError: boolean) => css`
   flex: 4;
   padding: 20px;
   position: relative;
   overflow: auto;
-  height: calc(100% - 40px);
+  height: ${shouldShowEditorError ? 'calc(100% - 40px)' : 'calc(100% - 10px)'};
   label: PageContent;
+  box-sizing: border-box;
 `;
 
 // -------------------- Page -------------------- //
 
-interface IPageProps {
+type IPageProps = {
   // TODO: add type
   toolbarItems: IToolbarItem[];
-  navLinks: INavTreeItem[];
   title: string;
+  headerStyle?: SerializedStyles;
   navRegionName: string;
   mainRegionName: string;
+  shouldShowEditorError?: boolean;
   onRenderHeaderContent?: () => string | JSX.Element | null;
   'data-testid'?: string;
-}
+  useNewTree?: boolean;
+  navLinks?: INavTreeItem[];
+  pageMode: PageMode;
+  showCommonLinks?: boolean;
+  projectId?: string;
+  skillId?: string;
+  dialogId?: string;
+  fileId?: string;
+};
 
 const Page: React.FC<IPageProps> = (props) => {
-  const { title, navLinks, toolbarItems, onRenderHeaderContent, children, navRegionName, mainRegionName } = props;
+  const {
+    title,
+    navLinks,
+    toolbarItems,
+    onRenderHeaderContent,
+    children,
+    navRegionName,
+    mainRegionName,
+    headerStyle = header,
+    shouldShowEditorError = true,
+    useNewTree,
+    pageMode,
+    showCommonLinks = false,
+    projectId,
+    skillId,
+    dialogId,
+    fileId,
+  } = props;
+
+  const { setPageElementState } = useRecoilValue(dispatcherState);
+
+  const onMeasuredSizesChanged = (sizes: SplitMeasuredSizes) => {
+    setPageElementState(pageMode, { leftSplitWidth: sizes.primary });
+  };
 
   return (
     <div css={root} data-testid={props['data-testid']}>
       <div css={pageWrapper}>
         <Toolbar toolbarItems={toolbarItems} />
-        <div css={header}>
+        <div css={headerStyle}>
           <h1 css={headerTitle}>{title}</h1>
           {onRenderHeaderContent && <div css={headerContent}>{onRenderHeaderContent()}</div>}
         </div>
         <div css={main} role="main">
-          <LeftRightSplit initialLeftGridWidth="20%" minLeftPixels={200} minRightPixels={800}>
-            <NavTree navLinks={navLinks} regionName={navRegionName} />
-            <div aria-label={mainRegionName} css={content} data-testid="PageContent" role="region">
+          <Split
+            resetOnDoubleClick
+            initialPrimarySize="20%"
+            minPrimarySize="200px"
+            minSecondarySize="800px"
+            renderSplitter={renderThinSplitter}
+            onMeasuredSizesChanged={onMeasuredSizesChanged}
+          >
+            {useNewTree ? (
+              <ProjectTree
+                options={{
+                  showDelete: false,
+                  showTriggers: false,
+                  showDialogs: true,
+                  showLgImports: pageMode === 'language-generation',
+                  showLuImports: pageMode === 'language-understanding',
+                  showRemote: false,
+                  showMenu: false,
+                  showQnAMenu: title === 'QnA',
+                  showErrors: false,
+                  showCommonLinks,
+                }}
+                selectedLink={{
+                  projectId,
+                  skillId,
+                  dialogId,
+                  lgFileId: pageMode === 'language-generation' && fileId ? fileId : undefined,
+                  luFileId: pageMode === 'language-understanding' && fileId ? fileId : undefined,
+                }}
+                onSelect={(link) => {
+                  navigateTo(buildURL(pageMode, link));
+                }}
+              />
+            ) : (
+              <NavTree navLinks={navLinks as INavTreeItem[]} regionName={navRegionName} />
+            )}
+            <div
+              aria-label={mainRegionName}
+              css={content(shouldShowEditorError)}
+              data-testid="PageContent"
+              role="region"
+            >
               {children}
             </div>
-          </LeftRightSplit>
+          </Split>
         </div>
       </div>
     </div>
