@@ -8,7 +8,7 @@ import find from 'lodash/find';
 import formatMessage from 'format-message';
 import { PrimaryButton, DefaultButton } from 'office-ui-fabric-react/lib/Button';
 import { Icon } from 'office-ui-fabric-react/lib/Icon';
-import { ChoiceGroup } from 'office-ui-fabric-react/lib/ChoiceGroup';
+import { ChoiceGroup, IChoiceGroupOption } from 'office-ui-fabric-react/lib/ChoiceGroup';
 import { DialogFooter } from 'office-ui-fabric-react/lib/Dialog';
 import { ScrollablePane, ScrollbarVisibility } from 'office-ui-fabric-react/lib/ScrollablePane';
 import { Selection } from 'office-ui-fabric-react/lib/DetailsList';
@@ -24,12 +24,19 @@ import { BotTemplate } from '@bfc/shared';
 import { DialogWrapper, DialogTypes } from '@bfc/ui-shared';
 import { NeutralColors } from '@uifabric/fluent-theme';
 import { RouteComponentProps } from '@reach/router';
+import { useRecoilValue } from 'recoil';
+import { MessageBar } from 'office-ui-fabric-react/lib/components/MessageBar';
+import { Link } from 'office-ui-fabric-react/lib/Link';
+import { mergeStyles } from 'office-ui-fabric-react/lib/Styling';
 
 import { DialogCreationCopy, EmptyBotTemplateId, QnABotTemplateId } from '../../constants';
+import { creationFlowTypeState } from '../../recoilModel';
+import { featureFlagsState } from '../../recoilModel';
+import TelemetryClient from '../../telemetry/TelemetryClient';
 
 // -------------------- Styles -------------------- //
 
-const optionIcon = (checked) => css`
+const optionIcon = (checked: boolean) => css`
   vertical-align: text-bottom;
   font-size: 18px;
   margin-right: 10px;
@@ -54,7 +61,11 @@ const listHeader = css`
   margin-bottom: 0;
 `;
 
-const rowDetails = (disabled) => {
+export const bannerClass = mergeStyles({
+  marginTop: '5px',
+});
+
+const rowDetails = (disabled: boolean) => {
   return {
     root: {
       color: disabled ? NeutralColors.gray80 : NeutralColors.black,
@@ -72,7 +83,7 @@ const rowDetails = (disabled) => {
   };
 };
 
-const rowTitle = (disabled) => {
+const rowTitle = (disabled: boolean) => {
   return {
     cellTitle: {
       color: disabled ? NeutralColors.gray80 : NeutralColors.black,
@@ -116,6 +127,9 @@ export function CreateOptions(props: CreateOptionsProps) {
   const { templates, onDismiss, onNext } = props;
   const [currentTemplate, setCurrentTemplate] = useState('');
   const [emptyBotKey, setEmptyBotKey] = useState('');
+  const creationFlowType = useRecoilValue(creationFlowTypeState);
+
+  const featureFlags = useRecoilValue(featureFlagsState);
   const selection = useMemo(() => {
     return new Selection({
       onSelectionChanged: () => {
@@ -127,17 +141,19 @@ export function CreateOptions(props: CreateOptionsProps) {
     });
   }, []);
 
-  function SelectOption(props) {
+  function SelectOption(props?: { checked?: boolean; text: string; key: string }) {
+    if (props == null) return null;
     const { checked, text, key } = props;
     return (
       <div key={key} css={optionRoot}>
-        <Icon css={optionIcon(checked)} iconName={checked ? 'CompletedSolid' : 'RadioBtnOff'} />
+        <Icon css={optionIcon(checked ?? false)} iconName={checked ? 'CompletedSolid' : 'RadioBtnOff'} />
         <span>{text}</span>
       </div>
     );
   }
 
-  const handleChange = (event, option) => {
+  const handleChange = (event, option?: IChoiceGroupOption) => {
+    if (option == null) return;
     setOption(option.key);
     if (option.key === optionKeys.createFromTemplate) {
       setDisabled(false);
@@ -150,16 +166,18 @@ export function CreateOptions(props: CreateOptionsProps) {
     let routeToTemplate = emptyBotKey;
     if (option === optionKeys.createFromTemplate) {
       routeToTemplate = currentTemplate;
+      TelemetryClient.track('CreateNewBotProjectFromExample', { template: routeToTemplate });
     }
 
     if (option === optionKeys.createFromQnA) {
       routeToTemplate = QnABotTemplateId;
     }
 
-    if (props.location && props.location.search) {
+    if (props.location?.search) {
       routeToTemplate += props.location.search;
     }
 
+    TelemetryClient.track('CreateNewBotProjectNextButton', { template: routeToTemplate });
     onNext(routeToTemplate);
   };
 
@@ -252,21 +270,23 @@ export function CreateOptions(props: CreateOptionsProps) {
     },
   ];
 
+  const choiceGroupTitle = creationFlowType === 'Skill' ? '' : formatMessage('Choose how to create your bot');
+  const dialogWrapperProps =
+    creationFlowType === 'Skill' ? DialogCreationCopy.CREATE_NEW_SKILLBOT : DialogCreationCopy.CREATE_NEW_BOT;
+  // TODO: remove banner UI when REMOTE_TEMPLATE_CREATION_EXPERIENCE is removed
   return (
     <Fragment>
-      <DialogWrapper
-        isOpen
-        {...DialogCreationCopy.CREATE_NEW_BOT}
-        dialogType={DialogTypes.CreateFlow}
-        onDismiss={onDismiss}
-      >
-        <ChoiceGroup
-          label={formatMessage('Choose how to create your bot')}
-          options={choiceOptions}
-          selectedKey={option}
-          onChange={handleChange}
-        />
+      <DialogWrapper isOpen {...dialogWrapperProps} dialogType={DialogTypes.CreateFlow} onDismiss={onDismiss}>
+        <ChoiceGroup label={choiceGroupTitle} options={choiceOptions} selectedKey={option} onChange={handleChange} />
         <h3 css={listHeader}>{formatMessage('Examples')}</h3>
+        {featureFlags?.REMOTE_TEMPLATE_CREATION_EXPERIENCE?.enabled && (
+          <MessageBar className={bannerClass}>
+            {formatMessage('Conversational Core preview template is available since you have that feature turned on.')}
+            <Link href="https://aka.ms/AAabzf9" target="_blank">
+              {formatMessage('Learn More.')}
+            </Link>
+          </MessageBar>
+        )}
         <div css={detailListContainer} data-is-scrollable="true">
           <ScrollablePane scrollbarVisibility={ScrollbarVisibility.auto}>
             <DetailsList

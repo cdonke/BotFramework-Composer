@@ -16,14 +16,20 @@ export const DEFAULT_USER_SETTINGS = {
     lineNumbers: false,
     wordWrap: false,
     minimap: false,
+    fontSettings: {
+      fontFamily: 'Courier New',
+      fontSize: '18px',
+      fontWeight: '500',
+    },
   },
   propertyEditorWidth: 400,
   dialogNavWidth: 180,
   appLocale: 'en-US',
+  telemetry: {},
 };
 
 export const getUserSettings = (): UserSettings => {
-  const loadedSettings = storage.get('userSettings') || {};
+  const loadedSettings = storage.get('userSettings', {});
   const settings = merge(DEFAULT_USER_SETTINGS, loadedSettings);
 
   if (isElectron()) {

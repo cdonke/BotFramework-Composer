@@ -11,8 +11,19 @@ import isEqual from 'lodash/isEqual';
 import debounce from 'lodash/debounce';
 import get from 'lodash/get';
 import { MicrosoftAdaptiveDialog } from '@bfc/shared';
+import { useRecoilValue } from 'recoil';
+import { css } from '@emotion/core';
 
+import { botDisplayNameState, dialogDiagnosticsSelectorFamily, projectMetaDataState } from '../../recoilModel';
+
+import { PropertyEditorHeader } from './PropertyEditorHeader';
 import { formEditor } from './styles';
+
+const propertyEditorWrapperStyle = css`
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+`;
 
 function resolveBaseSchema(schema: JSONSchema7, $kind: string): JSONSchema7 | undefined {
   const defSchema = schema.definitions?.[$kind];
@@ -26,8 +37,11 @@ function resolveBaseSchema(schema: JSONSchema7, $kind: string): JSONSchema7 | un
 
 const PropertyEditor: React.FC = () => {
   const { shellApi, ...shellData } = useShellApi();
-  const { currentDialog, focusPath, focusedSteps, focusedTab, schemas } = shellData;
+  const { currentDialog, focusPath, focusedSteps, focusedTab, schemas, projectId } = shellData;
   const { onFocusSteps } = shellApi;
+  const botName = useRecoilValue(botDisplayNameState(projectId));
+  const projectData = useRecoilValue(projectMetaDataState(projectId));
+  const diagnostics = useRecoilValue(dialogDiagnosticsSelectorFamily({ projectId, dialogId: currentDialog.id }));
 
   const dialogData = useMemo(() => {
     if (currentDialog?.content) {
@@ -61,15 +75,14 @@ const PropertyEditor: React.FC = () => {
     if (schemas?.sdk?.content && localData) {
       return resolveBaseSchema(schemas.sdk.content, localData.$kind);
     }
-  }, [schemas?.sdk?.content, localData.$kind]);
+  }, [schemas?.sdk?.content, localData?.$kind]);
 
   const $uiOptions = useMemo(() => {
     return getUIOptions($schema, formUIOptions);
   }, [$schema, formUIOptions]);
 
   const errors = useMemo(() => {
-    const diagnostics = currentDialog?.diagnostics;
-    if (diagnostics) {
+    if (diagnostics?.length) {
       const currentPath = focusPath.replace('#', '');
 
       return diagnostics.reduce((errors, d) => {
@@ -120,16 +133,19 @@ const PropertyEditor: React.FC = () => {
   };
 
   return (
-    <div aria-label={formatMessage('form editor')} css={formEditor} data-testid="PropertyEditor" role="region">
-      <AdaptiveForm
-        errors={errors}
-        focusedTab={focusedTab}
-        formData={localData}
-        schema={$schema}
-        uiOptions={$uiOptions}
-        onChange={handleDataChange}
-        onFocusedTab={handleFocusTab}
-      />
+    <div css={propertyEditorWrapperStyle}>
+      {!localData || !$schema ? <PropertyEditorHeader botName={botName} projectData={projectData} /> : null}
+      <div aria-label={formatMessage('form editor')} css={formEditor} data-testid="PropertyEditor" role="region">
+        <AdaptiveForm
+          errors={errors}
+          focusedTab={focusedTab}
+          formData={localData}
+          schema={$schema}
+          uiOptions={$uiOptions}
+          onChange={handleDataChange}
+          onFocusedTab={handleFocusTab}
+        />
+      </div>
     </div>
   );
 };

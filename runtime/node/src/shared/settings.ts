@@ -4,6 +4,7 @@
 export interface BotSettings {
   feature: BotFeatureSettings;
   blobStorage: BlobStorageConfiguration;
+  speech: SpeechConfiguration;
   MicrosoftAppId: string;
   MicrosoftAppPassword: string;
   cosmosDb: CosmosDbConfiguration;
@@ -17,6 +18,7 @@ export interface BotFeatureSettings {
   useShowTypingMiddleware: boolean;
   useInspectionMiddleware: boolean;
   removeRecipientMention: boolean;
+  useSetSpeakMiddleware: boolean;
 }
 
 export interface BotSkillSettings {
@@ -29,9 +31,14 @@ export interface BlobStorageConfiguration {
   container: string;
 }
 
+export interface SpeechConfiguration {
+  voiceFontName: string;
+  fallbackToTextForSpeechIfEmpty: boolean;
+}
+
 export interface CosmosDbConfiguration {
   authKey: string;
-  collectionId: string;
+  containerId: string;
   cosmosDBEndpoint: string;
   databaseId: string;
 }

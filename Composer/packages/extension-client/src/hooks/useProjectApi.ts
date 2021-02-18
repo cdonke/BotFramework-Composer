@@ -20,6 +20,8 @@ const PROJECT_KEYS = [
   'data.skills',
   'data.skillsSettings',
   'data.schemas',
+  'data.settings',
+  'data.projectCollection',
 
   'api.getDialog',
   'api.saveDialog',
@@ -34,6 +36,8 @@ const PROJECT_KEYS = [
   'api.updateDialogSchema',
   'api.createTrigger',
   'api.updateSkillSetting',
+  'api.reloadProject',
+  'api.navTo',
 ];
 
 export function useProjectApi(): ProjectContext & ProjectContextApi {

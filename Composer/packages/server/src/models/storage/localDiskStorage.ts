@@ -8,6 +8,7 @@ import path from 'path';
 import glob from 'globby';
 import archiver from 'archiver';
 import rimraf from 'rimraf';
+import { FileExtensions } from '@botframework-composer/types';
 
 import { IFileStorage, Stat, MakeDirectoryOptions } from './interface';
 
@@ -28,7 +29,7 @@ export class LocalDiskStorage implements IFileStorage {
     // test to see if this file is writable
     let writable = true;
     try {
-      fs.accessSync(path, fs.constants.W_OK);
+      fs.accessSync(path, fs.constants.W_OK); // lgtm [js/path-injection]
     } catch (err) {
       writable = false;
     }
@@ -99,13 +100,16 @@ export class LocalDiskStorage implements IFileStorage {
       '/settings/',
       '/generated/',
       '/knowledge-base/',
+      '/recognizers/',
+      '/form-dialogs/',
+      '/scripts/',
     ];
 
     const directoriesToInclude = defaultDirectories.filter((elem) => {
       return exclusions?.directories == undefined || exclusions?.directories?.indexOf(elem) == -1;
     });
 
-    const defaultFiles = ['*.botproject', '*.dialog'];
+    const defaultFiles = [`*${FileExtensions.BotProject}`, `*${FileExtensions.Dialog}`, 'README.md', '.gitignore'];
 
     const filesToInclude = defaultFiles.filter((elem) => {
       return exclusions?.files == undefined || exclusions?.files?.indexOf(elem) == -1;

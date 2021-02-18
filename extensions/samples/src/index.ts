@@ -77,7 +77,7 @@ function getRemoteSamples(): BotTemplate[] {
     package: {
       packageName: 'Preview.Bot.Component.ConversationalCore',
       packageSource: 'nuget',
-      packageVersion: '0.0.1-preview3'
+      packageVersion: '0.0.1-preview5'
     }
   }]
 }
@@ -133,10 +133,10 @@ const boilerplates = getBoilerplates();
 export default async (composer: any): Promise<void> => {
   // register this publishing method with Composer
   for (const template of samples) {
-    await composer.addBotTemplate(template);
-  }
+     await composer.addBotTemplate(template);
+   }
 
-  for (const template of boilerplates) {
-    await composer.addBaseTemplate(template);
-  }
+   for (const template of boilerplates) {
+     await composer.addBaseTemplate(template);
+   }
 };

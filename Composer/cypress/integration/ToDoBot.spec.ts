@@ -2,19 +2,18 @@
 // Licensed under the MIT License.
 
 context('ToDo Bot', () => {
-  before(() => {
+  beforeEach(() => {
+    window.localStorage.setItem('composer:userSettings', JSON.stringify({ telemetry: { allowDataCollection: false } }));
     cy.visit('/home');
     cy.createBot('TodoSample');
-    cy.findByTestId('WelcomeModalCloseIcon').click();
-    cy.findByText('Yes').click();
   });
 
   it('can open the main dialog', () => {
     cy.findByTestId('ProjectTree').within(() => {
-      cy.findByText('__TestTodoSample').click();
+      cy.findAllByText('__TestTodoSample').last().click();
     });
     cy.withinEditor('PropertyEditor', () => {
-      cy.findByDisplayValue('__TestTodoSample').should('exist');
+      cy.findAllByDisplayValue('__TestTodoSample').should('exist');
     });
   });
 

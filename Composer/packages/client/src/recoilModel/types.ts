@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 import { JSONSchema7 } from '@bfc/extension-client';
-import { AppUpdaterSettings, CodeEditorSettings, PromptTab } from '@bfc/shared';
+import { AppUpdaterSettings, CodeEditorSettings, PromptTab, TelemetrySettings } from '@bfc/shared';
 
 import { AppUpdaterStatus } from '../constants';
 
@@ -40,6 +40,7 @@ export interface PublishType {
     pull: boolean;
     rollback: boolean;
     status: boolean;
+    provision: boolean;
   };
 }
 
@@ -54,7 +55,7 @@ export interface RuntimeTemplate {
   startCommand: string;
 }
 
-export interface BotLoadError {
+export interface BotRuntimeError {
   title: string;
   message: string;
   linkAfterMessage?: { url: string; text: string };
@@ -98,6 +99,7 @@ export type UserSettingsPayload = {
   propertyEditorWidth: number;
   dialogNavWidth: number;
   appLocale: string;
+  telemetry: Partial<TelemetrySettings>;
 };
 
 export type BoilerplateVersion = {

@@ -51,7 +51,6 @@ export const SchemaField: React.FC<FieldProps> = (props) => {
       typeof uiOptions?.serializer?.set === 'function' ? uiOptions.serializer.set(newValue) : newValue;
 
     onChange(serializedValue);
-    setFieldFocused(true);
   };
 
   useEffect(() => {
@@ -101,7 +100,7 @@ export const SchemaField: React.FC<FieldProps> = (props) => {
     onFocus: () => setFieldFocused(true),
     onBlur: () => {
       setFieldFocused(false);
-      onBlur && onBlur(id);
+      onBlur?.(id);
     },
   };
 

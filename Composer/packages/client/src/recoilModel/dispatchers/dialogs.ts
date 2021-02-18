@@ -2,19 +2,17 @@
 // Licensed under the MIT License.
 /* eslint-disable react-hooks/rules-of-hooks */
 import { useRecoilCallback, CallbackInterface } from 'recoil';
-import { dialogIndexer, autofixReferInDialog, validateDialog } from '@bfc/indexers';
+import { dialogIndexer, autofixReferInDialog } from '@bfc/indexers';
 import { DialogInfo, checkForPVASchema } from '@bfc/shared';
 
 import {
-  lgFilesState,
-  luFilesState,
   dialogIdsState,
   schemasState,
   onCreateDialogCompleteState,
   actionsSeedState,
   showCreateDialogModalState,
   dialogState,
-} from '../atoms/botState';
+} from '../atoms';
 import { dispatcherState } from '../DispatcherWrapper';
 
 import { createLgFileState, removeLgFileState } from './lg';
@@ -67,7 +65,7 @@ export const dialogsDispatcher = () => {
       const { set } = callbackHelpers;
       set(actionsSeedState(projectId), actions);
       set(onCreateDialogCompleteState(projectId), { func: onComplete });
-      set(showCreateDialogModalState(projectId), true);
+      set(showCreateDialogModalState, true);
     }
   );
 
@@ -75,17 +73,15 @@ export const dialogsDispatcher = () => {
     const { set } = callbackHelpers;
     set(actionsSeedState(projectId), []);
     set(onCreateDialogCompleteState(projectId), { func: undefined });
-    set(showCreateDialogModalState(projectId), false);
+    set(showCreateDialogModalState, false);
   });
 
   const createDialog = useRecoilCallback((callbackHelpers: CallbackInterface) => async ({ id, content, projectId }) => {
     const { set, snapshot } = callbackHelpers;
     const fixedContent = JSON.parse(autofixReferInDialog(id, JSON.stringify(content)));
     const schemas = await snapshot.getPromise(schemasState(projectId));
-    const lgFiles = await snapshot.getPromise(lgFilesState(projectId));
-    const luFiles = await snapshot.getPromise(luFilesState(projectId));
     const dialog = { isRoot: false, displayName: id, ...dialogIndexer.parse(id, fixedContent) };
-    dialog.diagnostics = validateDialog(dialog, schemas.sdk.content, lgFiles, luFiles);
+
     if (typeof dialog.content === 'object') {
       dialog.content.id = id;
     }
@@ -99,7 +95,7 @@ export const dialogsDispatcher = () => {
     set(dialogState({ projectId, dialogId: dialog.id }), dialog);
     set(dialogIdsState(projectId), (dialogsIds) => [...dialogsIds, dialog.id]);
     set(actionsSeedState(projectId), []);
-    set(showCreateDialogModalState(projectId), false);
+    set(showCreateDialogModalState, false);
     const onComplete = (await snapshot.getPromise(onCreateDialogCompleteState(projectId))).func;
     if (typeof onComplete === 'function') {
       setTimeout(() => onComplete(id));

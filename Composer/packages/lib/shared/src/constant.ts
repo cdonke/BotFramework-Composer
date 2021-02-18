@@ -3,11 +3,19 @@
 
 export const SensitiveProperties = [
   'MicrosoftAppPassword',
-  'luis.authoringKey',
   'luis.endpointKey',
-  'qna.subscriptionKey',
   'qna.endpointKey',
+  'luis.authoringKey',
+  'qna.subscriptionKey',
 ];
+
+export const RootBotManagedProperties = [
+  'luis.authoringKey',
+  'luis.authoringRegion',
+  'qna.subscriptionKey',
+  'luis.endpointKey',
+];
+
 export const FieldNames = {
   Events: 'triggers',
   Actions: 'actions',
@@ -16,6 +24,7 @@ export const FieldNames = {
   DefaultCase: 'default',
   Cases: 'cases',
 };
+
 export const defaultPublishConfig = {
   name: 'default',
   type: 'localpublish',

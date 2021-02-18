@@ -2,41 +2,43 @@
 // Licensed under the MIT License.
 
 import formatMessage from 'format-message';
-
-export type FeatureFlag = {
-  // Name to be displayed for this features toggle UI in app settings page
-  displayName: string;
-  // Description to be displayed for this features toggle UI in app settings page
-  description: string;
-  // Indicates whether or not the feature flag toggle will be visible to the user through the settings page UI
-  // Hidden feature flags are intended for features not ready for public preview
-  isHidden: boolean;
-  enabled: boolean;
-};
-
-export type FeatureFlagKey = 'VA_CREATION' | 'FORM_DIALOG' | 'REMOTE_TEMPLATE_CREATION_EXPERIENCE';
-
-export type FeatureFlagMap = Record<FeatureFlagKey, FeatureFlag>;
+import { FeatureFlagMap } from '@botframework-composer/types';
 
 export const getDefaultFeatureFlags = (): FeatureFlagMap => ({
-  VA_CREATION: {
-    displayName: formatMessage('VA Creation'),
-    description: formatMessage('VA template made available in new bot flow.'),
+  NEW_CREATION_FLOW: {
+    displayName: formatMessage('New Creation Experience'),
+    description: formatMessage('Component templates populated from npm feeds'),
     isHidden: true,
     enabled: false,
   },
   FORM_DIALOG: {
-    displayName: formatMessage('Show Form Dialog'),
-    description: formatMessage('Show form dialog editor in the canvas'),
+    displayName: formatMessage('Form dialogs'),
+    description: formatMessage(
+      'Automatically generate dialogs that collect information from a user to manage conversations.'
+    ),
+    documentationLink: 'https://aka.ms/AAailpe',
     isHidden: false,
     enabled: false,
   },
   REMOTE_TEMPLATE_CREATION_EXPERIENCE: {
-    displayName: formatMessage('Remote templates'),
-    description: formatMessage(
-      'If turned on then externally stored templates will be selectable in the new bot flow template list'
-    ),
+    displayName: formatMessage('Conversational Core Template'),
+    description: formatMessage('Enable the new conversational core template built on the component model'),
+    documentationLink: 'https://aka.ms/AAabzf9',
     isHidden: true,
     enabled: false,
+  },
+  ORCHESTRATOR: {
+    displayName: formatMessage('Orchestrator'),
+    description: formatMessage('Recognize an intent, and take action or route to a skill, LUIS app, or QnAMaker KB'),
+    documentationLink: 'https://aka.ms/bf-orchestrator',
+    isHidden: false,
+    enabled: false,
+  },
+  PACKAGE_MANAGER: {
+    displayName: formatMessage('Package manager'),
+    description: formatMessage('Discover and use components that can be installed into your bot'),
+    isHidden: false,
+    enabled: false,
+    documentationLink: 'https://aka.ms/composer-package-manager-readme',
   },
 });

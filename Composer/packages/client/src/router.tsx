@@ -20,20 +20,25 @@ import {
   pluginPagesSelector,
   botOpeningMessage,
 } from './recoilModel';
+import { localBotsSettingDataSelector, rootBotProjectIdSelector } from './recoilModel/selectors/project';
 import { openAlertModal } from './components/Modal/AlertDialog';
 import { dialogStyle } from './components/Modal/dialogStyle';
 import { LoadingSpinner } from './components/LoadingSpinner';
 import { PluginPageContainer } from './pages/plugin/PluginPageContainer';
+import { botDisplayNameState, botProjectSpaceLoadedState } from './recoilModel/atoms';
+import { mergePropertiesManagedByRootBot } from './recoilModel/dispatchers/utils/project';
+import languageStorage from './utils/languageStorage';
 
 const DesignPage = React.lazy(() => import('./pages/design/DesignPage'));
 const LUPage = React.lazy(() => import('./pages/language-understanding/LUPage'));
 const QnAPage = React.lazy(() => import('./pages/knowledge-base/QnAPage'));
 const LGPage = React.lazy(() => import('./pages/language-generation/LGPage'));
 const SettingPage = React.lazy(() => import('./pages/setting/SettingsPage'));
-const Notifications = React.lazy(() => import('./pages/notifications/Notifications'));
+const BotProjectSettings = React.lazy(() => import('./pages/botProject/BotProjectSettings'));
+const Diagnostics = React.lazy(() => import('./pages/diagnostics/Diagnostics'));
 const Publish = React.lazy(() => import('./pages/publish/Publish'));
-const Skills = React.lazy(() => import('./pages/skills'));
 const BotCreationFlowRouter = React.lazy(() => import('./components/CreationFlow/CreationFlow'));
+const BotCreationFlowRouterV2 = React.lazy(() => import('./components/CreationFlow/v2/CreationFlow'));
 const FormDialogPage = React.lazy(() => import('./pages/form-dialog/FormDialogPage'));
 
 const Routes = (props) => {
@@ -58,17 +63,37 @@ const Routes = (props) => {
           <Redirect noThrow from="/bot/:projectId/knowledge-base" to="/bot/:projectId/knowledge-base/all" />
           <Redirect noThrow from="/bot/:projectId/publish" to="/bot/:projectId/publish/all" />
           <Redirect noThrow from="/" to={resolveToBasePath(BASEPATH, 'home')} />
+          <ProjectRouter path="/bot/:projectId/skill/:skillId">
+            <DesignPage path="dialogs/:dialogId/*" />
+            <LUPage path="language-understanding/all/*" />
+            <LUPage path="language-understanding/:dialogId/item/:luFileId/*" />
+            <LUPage path="language-understanding/:dialogId/*" />
+            <LGPage path="language-generation/all/*" />
+            <LGPage path="language-generation/common/*" />
+            <LGPage path="language-generation/:dialogId/item/:lgFileId/*" />
+            <LGPage path="language-generation/:dialogId/*" />
+            <QnAPage path="knowledge-base/all/*" />
+            <QnAPage path="knowledge-base/:dialogId/item/:qnaFileId/*" />
+            <QnAPage path="knowledge-base/:dialogId/*" />
+            <BotProjectSettings path="botProjectsSettings" />
+            <Diagnostics path="diagnostics" />
+            <DesignPage path="*" />
+          </ProjectRouter>
           <ProjectRouter path="/bot/:projectId">
             <DesignPage path="dialogs/:dialogId/*" />
+            <LUPage path="language-understanding/all/*" />
+            <LUPage path="language-understanding/:dialogId/item/:luFileId/*" />
             <LUPage path="language-understanding/:dialogId/*" />
+            <LGPage path="language-generation/all/*" />
+            <LGPage path="language-generation/:dialogId/item/:lgFileId/*" />
             <LGPage path="language-generation/:dialogId/*" />
             <QnAPage path="knowledge-base/:dialogId/*" />
-            <Notifications path="notifications" />
             <Publish path="publish/:targetName" />
-            <Skills path="skills/*" />
+            <BotProjectSettings path="botProjectsSettings" />
             <FormDialogPage path="forms/:schemaId/*" />
             <FormDialogPage path="forms/*" />
             <DesignPage path="*" />
+            <Diagnostics path="diagnostics" />
             {pluginPages.map((page) => (
               <PluginPageContainer
                 key={`${page.id}/${page.bundleId}`}
@@ -78,15 +103,9 @@ const Routes = (props) => {
               />
             ))}
           </ProjectRouter>
-          <ProjectRouter path="/bot/:projectId/skill/:skillId">
-            <DesignPage path="dialogs/:dialogId/*" />
-            <LUPage path="language-understanding/:dialogId/*" />
-            <LGPage path="language-generation/:dialogId/*" />
-            <QnAPage path="knowledge-base/:dialogId/*" />
-            <DesignPage path="*" />
-          </ProjectRouter>
           <SettingPage path="settings/*" />
           <BotCreationFlowRouter path="projects/*" />
+          <BotCreationFlowRouterV2 path="v2/projects/*" />
           <BotCreationFlowRouter path="home" />
           <NotFound default />
         </Router>
@@ -115,8 +134,27 @@ const projectStyle = css`
 const ProjectRouter: React.FC<RouteComponentProps<{ projectId: string; skillId: string }>> = (props) => {
   const { projectId = '' } = props;
   const schemas = useRecoilValue(schemasState(projectId));
-  const { fetchProjectById } = useRecoilValue(dispatcherState);
+  const { fetchProjectById, setSettings, setLocale } = useRecoilValue(dispatcherState);
   const botProjects = useRecoilValue(botProjectIdsState);
+  const localBots = useRecoilValue(localBotsSettingDataSelector);
+  const botProjectSpaceLoaded = useRecoilValue(botProjectSpaceLoadedState);
+  const rootBotProjectId = useRecoilValue(rootBotProjectIdSelector);
+  const botName = useRecoilValue(botDisplayNameState(rootBotProjectId || ''));
+
+  useEffect(() => {
+    if (botProjectSpaceLoaded && rootBotProjectId && localBots) {
+      for (let i = 0; i < localBots.length; i++) {
+        const id = localBots[i].projectId;
+        const setting = localBots[i].setting;
+        const mergedSettings = mergePropertiesManagedByRootBot(id, rootBotProjectId, setting);
+        setSettings(id, mergedSettings);
+      }
+      const storedLocale = languageStorage.get(botName)?.locale;
+      if (storedLocale) {
+        setLocale(storedLocale, rootBotProjectId);
+      }
+    }
+  }, [botProjectSpaceLoaded, rootBotProjectId, botProjects]);
 
   useEffect(() => {
     if (props.projectId && !botProjects.includes(props.projectId)) {

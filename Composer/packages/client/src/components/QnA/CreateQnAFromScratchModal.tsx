@@ -42,8 +42,7 @@ export const CreateQnAFromScratchModal: React.FC<CreateQnAFromModalProps> = (pro
 
   formConfig.name.validate = validateName(qnaFiles);
   const { formData, updateField, hasErrors, formErrors } = useForm(formConfig);
-  const disabled = hasErrors;
-
+  const disabled = hasErrors || !formData.name;
   return (
     <Dialog
       dialogContentProps={{
@@ -77,7 +76,7 @@ export const CreateQnAFromScratchModal: React.FC<CreateQnAFromModalProps> = (pro
             styles={{ root: { float: 'left' } }}
             text={formatMessage('Back')}
             onClick={() => {
-              actions.createQnAFromScratchDialogCancel({ projectId });
+              actions.createQnAFromScratchDialogBack({ projectId });
             }}
           />
         )}
@@ -85,7 +84,7 @@ export const CreateQnAFromScratchModal: React.FC<CreateQnAFromModalProps> = (pro
           text={formatMessage('Cancel')}
           onClick={() => {
             actions.createQnAFromScratchDialogCancel({ projectId });
-            onDismiss && onDismiss();
+            onDismiss?.();
           }}
         />
         <PrimaryButton

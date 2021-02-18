@@ -3,11 +3,12 @@
 
 import * as fs from 'fs';
 
-import { ExtensionContext, UserIdentity } from '@bfc/extension';
 import { remove } from 'fs-extra';
 import { SchemaMerger } from '@microsoft/bf-dialog/lib/library/schemaMerger';
 import formatMessage from 'format-message';
+import { UserIdentity } from '@botframework-composer/types';
 
+import { ExtensionContext } from '../models/extension/extensionContext';
 import { LocationRef } from '../models/bot/interface';
 import settings from '../settings';
 import log from '../logger';
@@ -71,12 +72,12 @@ export async function ejectAndMerge(currentProject: BotProject, jobId: string) {
     BackgroundProcessManager.updateProcess(jobId, 202, formatMessage('Building runtime'));
     await runtime.build(runtimePath, currentProject);
 
-    const manifestFile = runtime.identifyManifest(runtimePath);
+    const manifestFile = runtime.identifyManifest(currentProject.dataDir, currentProject.name);
 
     // run the merge command to merge all package dependencies from the template to the bot project
     BackgroundProcessManager.updateProcess(jobId, 202, formatMessage('Merging Packages'));
     const realMerge = new SchemaMerger(
-      [manifestFile],
+      [manifestFile, '!**/imported/**', '!**/generated/**'],
       Path.join(currentProject.dataDir, 'schemas/sdk'),
       Path.join(currentProject.dataDir, 'dialogs/imported'),
       false,

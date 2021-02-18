@@ -4,6 +4,7 @@
 import { IDiagnostic, IRange } from './diagnostic';
 import { IIntentTrigger } from './dialogUtils';
 import { MicrosoftIDialog } from './sdk';
+import { SDKKinds } from './schema';
 
 import { DialogSetting } from './index';
 
@@ -47,6 +48,8 @@ export type DialogSchemaFile = {
   content: any;
 };
 
+export type LuProviderType = SDKKinds.LuisRecognizer | SDKKinds.OrchestratorRecognizer;
+
 export type DialogInfo = {
   content: MicrosoftIDialog;
   diagnostics: IDiagnostic[];
@@ -62,6 +65,7 @@ export type DialogInfo = {
   triggers: ITrigger[];
   intentTriggers: IIntentTrigger[];
   skills: string[];
+  luProvider?: LuProviderType;
   isFormDialog: boolean;
 };
 
@@ -110,11 +114,25 @@ export type LuFile = {
   intents: LuIntentSection[];
   empty: boolean;
   resource: LuParseResource;
+  imports: { id: string; path: string; description: string }[];
+  published?: boolean;
+};
+
+export type LuParseResourceSection = {
+  Name: string;
+  Body: string;
+  SectionType: string;
+  Path: string;
+  Id: string;
+  Description: string;
+  Answer: string;
+  Questions: string[];
+  ModelInfo: string;
   [key: string]: any;
 };
 
 export type LuParseResource = {
-  Sections: any[];
+  Sections: LuParseResourceSection[];
   Errors: any[];
   Content: string;
 };
@@ -132,11 +150,10 @@ export type QnAFile = {
   content: string;
   diagnostics: IDiagnostic[];
   qnaSections: QnASection[];
-  imports: { id: string; path: string }[];
+  imports: { id: string; path: string; description: string }[];
   options: { id: string; name: string; value: string }[];
   empty: boolean;
   resource: LuParseResource;
-  [key: string]: any;
 };
 
 export type LgTemplate = {
@@ -144,6 +161,7 @@ export type LgTemplate = {
   body: string;
   parameters: string[];
   range?: IRange;
+  properties?: Record<string, unknown>;
 };
 
 export type LgParsed = {
@@ -152,8 +170,20 @@ export type LgParsed = {
 };
 
 export type LanguageFileImport = {
-  id: string;
+  /**
+   * The display name of the import (the part between the brackets)
+   */
+  displayName: string;
+
+  /**
+   * The path to the language files (the part between the parens)
+   */
   importPath: string;
+
+  /**
+   * The ID of the LGFile or LUFile (extracted from the importPath)
+   */
+  id: string;
 };
 
 export type LgFile = {
@@ -162,19 +192,31 @@ export type LgFile = {
   diagnostics: IDiagnostic[];
   templates: LgTemplate[];
   allTemplates: LgTemplate[];
+  imports: { id: string; path: string; description: string }[];
   options?: string[];
   parseResult?: any;
 };
 
+export type Manifest = {
+  name: string;
+  version: string;
+  description: string;
+  endpoints: ManifestEndpoint[];
+};
+
+export type ManifestEndpoint = {
+  name: string;
+  endpointUrl: string;
+  msAppId: string;
+  description: string;
+};
+
 export type Skill = {
   id: string;
-  content: any;
+  manifest?: Manifest;
   description?: string;
-  endpoints: any[];
-  endpointUrl: string;
-  manifestUrl: string;
-  msAppId: string;
   name: string;
+  remote: boolean;
 };
 
 export type JsonSchemaFile = {
@@ -190,13 +232,7 @@ export type FileResolver = (id: string) => FileInfo | undefined;
 
 export type MemoryResolver = (id: string) => string[] | undefined;
 
-export type SkillManifestInfo = {
-  content: { [key: string]: any };
-  lastModified: string;
-  id: string;
-};
-
-export type SkillManifest = {
+export type SkillManifestFile = {
   content: any;
   id: string;
   path?: string;
@@ -209,7 +245,7 @@ export type BotAssets = {
   luFiles: LuFile[];
   lgFiles: LgFile[];
   qnaFiles: QnAFile[];
-  skillManifests: SkillManifest[];
+  skillManifests: SkillManifestFile[];
   setting: DialogSetting;
   dialogSchemas: DialogSchemaFile[];
   formDialogSchemas: FormDialogSchema[];
@@ -257,7 +293,9 @@ export type FormDialogSchemaTemplate = {
 
 export type RecognizerFile = {
   id: string;
-  content: any;
+  content: {
+    $kind: SDKKinds;
+  };
 };
 
 export type CrosstrainConfig = {

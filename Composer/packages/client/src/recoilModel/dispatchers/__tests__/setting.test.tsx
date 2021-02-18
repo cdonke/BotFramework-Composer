@@ -2,14 +2,13 @@
 // Licensed under the MIT License.
 
 import { useRecoilValue } from 'recoil';
-import { act } from '@botframework-composer/test-utils/lib/hooks';
+import { act, HookResult } from '@botframework-composer/test-utils/lib/hooks';
 
 import { renderRecoilHook } from '../../../../__tests__/testUtils';
-import { settingsState, currentProjectIdState, skillsState } from '../../atoms';
+import { settingsState, currentProjectIdState } from '../../atoms';
 import { dispatcherState } from '../../../recoilModel/DispatcherWrapper';
 import { Dispatcher } from '..';
 import { settingsDispatcher } from '../setting';
-import httpClient from '../../../utils/httpUtil';
 
 jest.mock('../../../utils/httpUtil');
 
@@ -20,12 +19,13 @@ const settings = {
     UseShowTypingMiddleware: false,
     UseInspectionMiddleware: false,
     RemoveRecipientMention: false,
+    UseSetSpeakMiddleware: false,
   },
   MicrosoftAppPassword: '',
   MicrosoftAppId: '',
   cosmosDb: {
     authKey: '',
-    collectionId: 'botstate-collection',
+    containerId: 'botstate-container',
     cosmosDBEndpoint: '',
     databaseId: 'botstate-db',
   },
@@ -35,6 +35,10 @@ const settings = {
   blobStorage: {
     connectionString: '',
     container: 'transcripts',
+  },
+  speech: {
+    voiceFontName: 'en-US-AriaNeural',
+    fallbackToTextForSpeechIfEmpty: true,
   },
   defaultLanguage: 'en-us',
   languages: ['en-us'],
@@ -49,6 +53,7 @@ const settings = {
     environment: 'composer',
   },
   publishTargets: [],
+  importedLibraries: [],
   qna: {
     knowledgebaseid: '',
     endpointKey: '',
@@ -63,33 +68,33 @@ const settings = {
     customRuntime: false,
     path: '',
     command: '',
+    key: '',
+    name: '',
   },
   downsampling: {
     maxImbalanceRatio: 10,
-    maxUtteranceAllowed: 15000,
   },
   skill: {},
+  customFunctions: [],
 };
 
 describe('setting dispatcher', () => {
-  let renderedComponent, dispatcher: Dispatcher;
-  beforeEach(() => {
-    const useRecoilTestHook = () => {
-      const settings = useRecoilValue(settingsState(projectId));
-      const skills = useRecoilValue(skillsState(projectId));
-      const currentDispatcher = useRecoilValue(dispatcherState);
-      return {
-        settings,
-        skills,
-        currentDispatcher,
-      };
+  const useRecoilTestHook = () => {
+    const settings = useRecoilValue(settingsState(projectId));
+    const currentDispatcher = useRecoilValue(dispatcherState);
+    return {
+      settings,
+      currentDispatcher,
     };
+  };
 
+  let renderedComponent: HookResult<ReturnType<typeof useRecoilTestHook>>, dispatcher: Dispatcher;
+
+  beforeEach(() => {
     const { result } = renderRecoilHook(useRecoilTestHook, {
       states: [
         { recoilState: settingsState(projectId), initialValue: settings },
         { recoilState: currentProjectIdState, initialValue: projectId },
-        { recoilState: skillsState(projectId), initialValue: [] },
       ],
       dispatcher: {
         recoilState: dispatcherState,
@@ -131,8 +136,8 @@ describe('setting dispatcher', () => {
       );
     });
 
-    expect(renderedComponent.current.settings.publishTargets.length).toBe(1);
-    expect(renderedComponent.current.settings.publishTargets[0].name).toBe('new');
+    expect(renderedComponent.current.settings.publishTargets?.length).toBe(1);
+    expect(renderedComponent.current.settings.publishTargets?.[0].name).toBe('new');
   });
 
   it('should update RuntimeSettings', async () => {
@@ -144,6 +149,7 @@ describe('setting dispatcher', () => {
     expect(renderedComponent.current.settings.runtime.path).toBe('path');
     expect(renderedComponent.current.settings.runtime.command).toBe('command');
     expect(renderedComponent.current.settings.runtime.key).toBe('key');
+    // @ts-ignore - runtime has 'name' in practice and is of a type that has 'name', but TS isn't seeing it somehow
     expect(renderedComponent.current.settings.runtime.name).toBe('name');
   });
 
@@ -157,39 +163,5 @@ describe('setting dispatcher', () => {
       await dispatcher.setCustomRuntime(projectId, true);
     });
     expect(renderedComponent.current.settings.runtime.customRuntime).toBeTruthy();
-  });
-
-  it('should update skills state', async () => {
-    (httpClient.get as jest.Mock).mockResolvedValue({
-      data: { description: 'description', endpoints: [{ endpointUrl: 'https://test' }] },
-    });
-
-    await act(async () => {
-      await dispatcher.setSettings(projectId, {
-        skill: {
-          foo: {
-            msAppId: '00000000-0000',
-            endpointUrl: 'https://skill-manifest/api/messages',
-            name: 'foo',
-            manifestUrl: 'https://skill-manifest',
-          },
-        },
-      } as any);
-    });
-
-    expect(renderedComponent.current.skills).toEqual(
-      expect.arrayContaining([
-        {
-          id: 'foo',
-          name: 'foo',
-          manifestUrl: 'https://skill-manifest',
-          msAppId: '00000000-0000',
-          endpointUrl: 'https://skill-manifest/api/messages',
-          description: 'description',
-          endpoints: expect.any(Array),
-          content: expect.any(Object),
-        },
-      ])
-    );
   });
 });

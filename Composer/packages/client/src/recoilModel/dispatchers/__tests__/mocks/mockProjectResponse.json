@@ -8635,13 +8635,14 @@
     "feature": {
       "UseShowTypingMiddleware": false,
       "UseInspectionMiddleware": false,
-      "RemoveRecipientMention": false
+      "RemoveRecipientMention": false,
+      "UseSetSpeakMiddleware": true
     },
     "MicrosoftAppPassword": "",
     "MicrosoftAppId": "",
     "cosmosDb": {
       "authKey": "",
-      "collectionId": "botstate-collection",
+      "containerId": "botstate-container",
       "cosmosDBEndpoint": "",
       "databaseId": "botstate-db"
     },
@@ -8652,10 +8653,14 @@
       "connectionString": "",
       "container": "transcripts"
     },
+    "speech": {
+      "voiceFontName": "en-US-AriaNeural",
+      "fallbackToTextForSpeechIfEmpty": "true"
+    },
     "defaultLanguage": "en-us",
     "languages": ["en-us"],
     "luis": {
-      "name": "",
+      "name": "EmptyBot-1",
       "authoringKey": "",
       "authoringEndpoint": "",
       "endpointKey": "",
@@ -8680,8 +8685,7 @@
       "command": ""
     },
     "downsampling": {
-      "maxImbalanceRatio": 10,
-      "maxUtteranceAllowed": 15000
+      "maxImbalanceRatio": 10
     }
   }
 }
