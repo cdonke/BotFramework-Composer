@@ -9,7 +9,7 @@
 FROM  mcr.microsoft.com/dotnet/core/sdk:3.1-focal as base
 RUN apt update \
     && apt -y install curl dirmngr apt-transport-https lsb-release ca-certificates \
-    && curl -sL https://deb.nodesource.com/setup_12.x | bash - \
+    && curl -sL https://deb.nodesource.com/setup_14.x | bash - \
     && apt install -y nodejs libgomp1 \
     && npm install -g yarn
 
@@ -20,8 +20,8 @@ WORKDIR /src/Composer
 COPY ./Composer .
 COPY ./extensions ../extensions
 # run yarn install as a distinct layer
-RUN yarn install --frozen-lock-file --network-timeout 1000000 $YARN_ARGS
-ENV NODE_OPTIONS "--max-old-space-size=8192"
+RUN yarn install --frozen-lock-file $YARN_ARGS
+ENV NODE_OPTIONS "--max-old-space-size=6114"
 ENV NODE_ENV "production"
 ENV COMPOSER_BUILTIN_EXTENSIONS_DIR "/src/extensions"
 RUN yarn build:prod $YARN_ARGS
